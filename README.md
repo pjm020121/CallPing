@@ -29,7 +29,7 @@ callPing/
 ## (1) Git Storage 세팅 (최초 1회만 실행)
 
 # 1. 원격 저장소 복제하기
-git clone [url] ## ** clone 전 반드시 `git config` 되어 있는지 확인하세요!
+git clone [url] ## **clone 전 반드시 `git config` 되어 있는지 확인하세요!**
 
 ## (2) 작업 시작 전 주의사항
 main 브랜치에서 직접 코드를 수정하시면 안됩니다.
