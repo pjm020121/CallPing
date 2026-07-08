@@ -1,10 +1,9 @@
 package com.callPing.callPing_API.dto.request.user;
 
+import com.callPing.callPing_API.dto.common.constant.ValidationRule;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 /**
  * 이메일 인증 코드(6자리) 검증 요청.
@@ -13,15 +12,16 @@ import lombok.NoArgsConstructor;
  * - POST /users/password-reset/email-verification/check
  * - POST /users/account-unlock/email-verification/check
  */
-@Getter
-@NoArgsConstructor
-public class EmailVerificationCheckRequestDTO {
+public record EmailVerificationCheckRequestDTO(
 
-    @NotBlank
-    @Email
-    private String email;
+        @NotBlank(message = ValidationRule.EMAIL_BLANK_MESSAGE)
+        @Email(message = ValidationRule.EMAIL_FORMAT_MESSAGE)
+        String email,
 
-    @NotBlank
-    @Pattern(regexp = "^[0-9]{6}$", message = "인증 코드는 6자리 숫자입니다.")
-    private String verificationCode;
-}
+        @NotBlank(message = ValidationRule.VERIFICATION_CODE_BLANK_MESSAGE)
+        @Pattern(
+                regexp = ValidationRule.VERIFICATION_CODE_REGEXP,
+                message = ValidationRule.VERIFICATION_CODE_FORMAT_MESSAGE
+        )
+        String verificationCode
+) {}

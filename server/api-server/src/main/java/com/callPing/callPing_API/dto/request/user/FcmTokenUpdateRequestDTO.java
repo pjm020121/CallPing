@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
  * - PATCH /users/me/fcm-token
  */
 public record FcmTokenUpdateRequestDTO(
+
         @NotBlank(message = "FCM 토큰은 필수입니다.")
         String fcmToken
 ) {}

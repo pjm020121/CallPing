@@ -1,5 +1,6 @@
 package com.callPing.callPing_API.dto.request.user;
 
+import com.callPing.callPing_API.dto.common.constant.ValidationRule;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
@@ -8,10 +9,11 @@ import jakarta.validation.constraints.NotBlank;
  * - PATCH /users/account-unlock
  */
 public record AccountUnlockRequestDTO(
-    @NotBlank
-    String loginId,
 
-    @NotBlank
-    @Email
-    String email
+        @NotBlank(message = ValidationRule.LOGIN_ID_BLANK_MESSAGE)
+        String loginId,
+
+        @NotBlank(message = ValidationRule.EMAIL_BLANK_MESSAGE)
+        @Email(message = ValidationRule.EMAIL_FORMAT_MESSAGE)
+        String email
 ) {}

@@ -1,20 +1,16 @@
 package com.callPing.callPing_API.dto.request.session;
 
 import jakarta.validation.constraints.NotBlank;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 /**
  * 로그인 요청.
  * - POST /sessions
  */
-@Getter
-@NoArgsConstructor
-public class LoginRequestDTO {
+public record LoginRequestDTO(
 
-    @NotBlank
-    private String loginId;
+        @NotBlank(message = "아이디는 필수입니다.")
+        String loginId,
 
-    @NotBlank
-    private String password;
-}
+        @NotBlank(message = "비밀번호는 필수입니다.")
+        String password
+) {}
