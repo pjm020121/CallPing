@@ -4,13 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a633fc23-bea1-4674-9883-74da7888de05" name="변경" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server/api-server/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/server/api-server/build.gradle" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server/api-server/src/main/java/com/callPing/callPing_API/ApiServerApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/server/api-server/src/main/java/com/callPing/callPing_API/ApiServerApplication.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server/api-server/src/main/java/com/callPing/callPing_API/dto/common/ApiResponse.java" beforeDir="false" afterPath="$PROJECT_DIR$/server/api-server/src/main/java/com/callPing/callPing_API/dto/common/ApiResponse.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server/api-server/src/main/java/com/callPing/callPing_API/dto/response/chat/ChatStopResponseDTO.java" beforeDir="false" />
-    </list>
+    <list default="true" id="a633fc23-bea1-4674-9883-74da7888de05" name="변경" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -154,6 +148,7 @@
       <workItem from="1783927294446" duration="8984000" />
       <workItem from="1783992582203" duration="3795000" />
       <workItem from="1783997771791" duration="358000" />
+      <workItem from="1783998189190" duration="236000" />
     </task>
     <servers />
   </component>
