@@ -1,8 +1,10 @@
 package com.callPing.callPing_API.dto.request.user;
 
 import com.callPing.callPing_API.dto.common.constant.ValidationRule;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
 /**
@@ -29,5 +31,9 @@ public record SignUpRequestDTO(
 
         @NotBlank(message = ValidationRule.EMAIL_BLANK_MESSAGE)
         @Email(message = ValidationRule.EMAIL_FORMAT_MESSAGE)
-        String email
+        String email,
+
+        @NotNull(message = ValidationRule.TERMS_AGREED_BLANK_MESSAGE)
+        @AssertTrue(message = ValidationRule.TERMS_AGREED_FALSE_MESSAGE)
+        Boolean termsAgreed
 ) {}
