@@ -1,0 +1,25 @@
+서버 확인
+curl http://localhost:8000/health
+
+채팅방 생성
+curl -X POST http://localhost:8080/chats/rooms
+
+질문 던지기
+curl -X POST http://localhost:8080/chats \
+  -H "Content-Type: application/json" \
+  -d '{"roomId": 1, "question": "신한카드 연체 정보 등록 기준이 어떻게 되나요?"}'
+
+curl -X POST http://localhost:8080/chats \
+  -H "Content-Type: application/json" \
+  -d '{"roomId": 1, "question": "일반 상환 학자금 대출 대출 기간 최대 몇 년으로 신 청할 수 있어?"}'
+
+방 상세 조회
+curl http://localhost:8080/chats/rooms/1
+
+방 목록 조회
+curl http://localhost:8080/chats/rooms
+
+stop 테스트
+curl -X POST http://localhost:8080/chats/rooms/1/stop \
+  -H "Content-Type: application/json" \
+  -d '{"chatId": 1, "answer": "중단 시점까지 표시된 답변 텍스트"}'

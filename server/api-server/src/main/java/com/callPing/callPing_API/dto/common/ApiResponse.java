@@ -23,4 +23,5 @@ public record ApiResponse<T>(
     public static <T> ApiResponse<T> fail(int status, String code, String message, String path, T data) {
         return new ApiResponse<>(false, status, code, message, path, OffsetDateTime.now(), data);
     }
+
 }
