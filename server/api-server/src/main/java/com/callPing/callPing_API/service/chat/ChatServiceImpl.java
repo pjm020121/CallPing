@@ -19,6 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
 
+    private static final int TITLE_MAX_LEN = 100;
     private final RagClient ragClient;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatHistoryRepository chatHistoryRepository;
@@ -68,7 +69,9 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @Transactional
     public ChatResponseDTO askQuestion(ChatRequestDTO request) {
+
         ChatRoom room = chatRoomRepository.findById(request.roomId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "존재하지 않는 채팅방입니다."));
@@ -77,7 +80,11 @@ public class ChatServiceImpl implements ChatService {
 
         boolean isFirstQuestion = chatHistoryRepository.countByRoomId(room.getRoomId()) == 0;
         if (isFirstQuestion) {
-            room.setTitle(request.question());
+            String question = request.question();
+            String title = question.length() > TITLE_MAX_LEN
+                    ? question.substring(0, TITLE_MAX_LEN) + "..."
+                    : question;
+            room.setTitle(title);
             chatRoomRepository.save(room);
         }
 
