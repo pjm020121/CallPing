@@ -1,14 +1,13 @@
 package com.callPing.callPing_API.client.rag;
 
+import com.callPing.callPing_API.exception.ApiException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.springframework.web.server.ResponseStatusException;
 
 @Slf4j
 @Component
@@ -30,24 +29,17 @@ public class RagClient {
                     .block();
 
             if (response == null) {
-                throw new ResponseStatusException(
-                        HttpStatus.SERVICE_UNAVAILABLE, "RAG 서버 응답이 비어있습니다.");
+                throw new ApiException(503, "CHAT_ERR_RAG_EMPTY_RESPONSE", "RAG 서버 응답이 비어있습니다.");
             }
 
             return response.answer();
 
         } catch (WebClientResponseException e) {
             String message = extractDetailMessage(e);
-            throw new ResponseStatusException(
-                    HttpStatus.valueOf(e.getStatusCode().value()),
-                    message
-            );
+            throw new ApiException(e.getStatusCode().value(), "CHAT_ERR_RAG_SERVER", message);
         } catch (Exception e) {
             log.error("RAG 서버 호출 실패", e);
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "RAG 서버에 연결할 수 없습니다."
-            );
+            throw new ApiException(503, "CHAT_ERR_RAG_UNAVAILABLE", "RAG 서버에 연결할 수 없습니다.");
         }
     }
 
@@ -61,9 +53,9 @@ public class RagClient {
             if (node.has("detail")) {
                 return node.get("detail").asText();
             }
-            return body; // detail 필드 없으면 fallback
+            return body;
         } catch (Exception parseEx) {
-            return body; // JSON 파싱 실패 시 원문 그대로
+            return body;
         }
     }
 

@@ -6,12 +6,11 @@ import com.callPing.callPing_API.domain.chat.ChatRoom;
 import com.callPing.callPing_API.dto.request.chat.ChatRequestDTO;
 import com.callPing.callPing_API.dto.request.chat.ChatStopRequestDTO;
 import com.callPing.callPing_API.dto.response.chat.*;
+import com.callPing.callPing_API.exception.ApiException;
 import com.callPing.callPing_API.repository.chat.ChatHistoryRepository;
 import com.callPing.callPing_API.repository.chat.ChatRoomRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
@@ -46,7 +45,7 @@ public class ChatServiceImpl implements ChatService {
                 .toList();
 
         if (rooms.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "과거 대화 내역이 존재하지 않습니다.");
+            throw new ApiException(404, "CHAT_ERR_NO_ROOMS", "과거 대화 내역이 존재하지 않습니다.");
         }
 
         return rooms;
@@ -55,8 +54,8 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public List<ChatRoomDetailResponseDTO> getRoomDetail(Long roomId) {
         chatRoomRepository.findById(roomId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "존재하지 않는 채팅방입니다."));
+                .orElseThrow(() -> new ApiException(
+                        404, "CHAT_ERR_ROOM_NOT_FOUND", "존재하지 않는 채팅방입니다."));
 
         return chatHistoryRepository.findAllByRoomIdOrderByCreatedAtAsc(roomId).stream()
                 .map(chat -> new ChatRoomDetailResponseDTO(
@@ -73,8 +72,8 @@ public class ChatServiceImpl implements ChatService {
     public ChatResponseDTO askQuestion(ChatRequestDTO request) {
 
         ChatRoom room = chatRoomRepository.findById(request.roomId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "존재하지 않는 채팅방입니다."));
+                .orElseThrow(() -> new ApiException(
+                        404, "CHAT_ERR_ROOM_NOT_FOUND", "존재하지 않는 채팅방입니다."));
 
         String answer = ragClient.query(request.question());
 
@@ -108,12 +107,12 @@ public class ChatServiceImpl implements ChatService {
     public void stopGeneration(Long roomId, ChatStopRequestDTO request) {
 
         ChatHistory chat = chatHistoryRepository.findById(request.chatId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "존재하지 않는 채팅입니다."));
+                .orElseThrow(() -> new ApiException(
+                        404, "CHAT_ERR_NOT_FOUND", "존재하지 않는 채팅입니다."));
 
         if (!chat.getRoomId().equals(roomId)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "해당 채팅방의 채팅이 아닙니다.");
+            throw new ApiException(
+                    400, "CHAT_ERR_ROOM_MISMATCH", "해당 채팅방의 채팅이 아닙니다.");
         }
 
         String finalAnswer = (request.answer() == null || request.answer().isBlank())
@@ -123,4 +122,45 @@ public class ChatServiceImpl implements ChatService {
         chat.setAnswer(finalAnswer);
         chatHistoryRepository.save(chat);
     }
+
+    @Override
+    @Transactional
+    public ChatDeleteResponseDTO deleteChat(Long chatId) {
+
+        ChatHistory chat = chatHistoryRepository.findById(chatId)
+                .orElseThrow(() -> new ApiException(
+                        404, "CHAT_ERR_NOT_FOUND", "존재하지 않는 채팅입니다."));
+
+        Long roomId = chat.getRoomId();
+
+        chatHistoryRepository.deleteById(chatId);
+
+        boolean roomDeleted = false;
+        if (chatHistoryRepository.countByRoomId(roomId) == 0) {
+            chatRoomRepository.deleteById(roomId);
+            roomDeleted = true;
+        }
+
+        return new ChatDeleteResponseDTO(chatId, roomId, roomDeleted);
+    }
+
+    @Override
+    @Transactional
+    public ChatRoomDeleteResponseDTO deleteRoom(Long roomId) {
+
+        chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new ApiException(
+                        404, "CHAT_ERR_ROOM_NOT_FOUND", "존재하지 않는 채팅방입니다."));
+
+        // TODO: 로그인 붙으면 소유자 검증 추가
+        // if (!room.getUserId().equals(currentUserId)) {
+        //     throw new ApiException(403, "CHAT_ERR_ACCESS_DENIED", "해당 채팅방을 삭제할 수 있는 권한이 없습니다.");
+        // }
+
+        chatHistoryRepository.deleteAllByRoomId(roomId);
+        chatRoomRepository.deleteById(roomId);
+
+        return new ChatRoomDeleteResponseDTO(roomId);
+    }
+
 }

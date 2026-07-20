@@ -11,4 +11,7 @@ public interface ChatService {
     List<ChatRoomResponseDTO> getRooms();
     List<ChatRoomDetailResponseDTO> getRoomDetail(Long roomId);
     ChatResponseDTO askQuestion(ChatRequestDTO request);
-    void stopGeneration(Long roomId, ChatStopRequestDTO request);}
+    void stopGeneration(Long roomId, ChatStopRequestDTO request);
+    ChatDeleteResponseDTO deleteChat(Long chatId);
+    ChatRoomDeleteResponseDTO deleteRoom(Long roomId);
+}
