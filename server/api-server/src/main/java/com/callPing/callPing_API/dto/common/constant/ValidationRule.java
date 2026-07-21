@@ -27,4 +27,8 @@ public final class ValidationRule {
     public static final String VERIFICATION_CODE_REGEXP = "^[0-9]{6}$";
     public static final String VERIFICATION_CODE_FORMAT_MESSAGE = "인증 코드는 6자리 숫자입니다.";
     public static final String VERIFICATION_CODE_BLANK_MESSAGE = "인증 코드는 필수입니다.";
+
+    // 약관 동의
+    public static final String TERMS_AGREED_BLANK_MESSAGE = "약관 동의 여부는 필수입니다.";
+    public static final String TERMS_AGREED_FALSE_MESSAGE = "필수 약관에 동의해야 회원가입이 가능합니다.";
 }
