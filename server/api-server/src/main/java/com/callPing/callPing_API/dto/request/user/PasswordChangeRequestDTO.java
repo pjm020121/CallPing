@@ -11,9 +11,12 @@ import jakarta.validation.constraints.Pattern;
 public record PasswordChangeRequestDTO(
 
         @NotBlank(message = ValidationRule.PASSWORD_BLANK_MESSAGE)
+        String currentPassword,
+
+        @NotBlank(message = ValidationRule.PASSWORD_BLANK_MESSAGE)
         @Pattern(
                 regexp = ValidationRule.PASSWORD_REGEXP,
                 message = ValidationRule.PASSWORD_FORMAT_MESSAGE
         )
-        String password
+        String newPassword
 ) {}
