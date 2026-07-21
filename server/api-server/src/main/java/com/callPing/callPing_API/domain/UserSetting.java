@@ -1,16 +1,15 @@
 package com.callPing.callPing_API.domain;
 
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 @Entity
 @Table(name = "user_settings")
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
 public class UserSetting {
 
     @Id
@@ -23,7 +22,7 @@ public class UserSetting {
     private User user;
 
     @Column(name = "upload_permission", nullable = false)
-    private Boolean uploadPermission = true;
+    private Boolean fileUploadPermission = true;
 
     @Column(name = "push_permission", nullable = false)
     private Boolean pushPermission = true;
@@ -34,13 +33,13 @@ public class UserSetting {
     public static UserSetting createSetting(User user) {
         UserSetting setting = new UserSetting();
         setting.setUser(user);
-        setting.setUploadPermission(true);
+        setting.setFileUploadPermission(true);
         setting.setPushPermission(true);
         return setting;
     }
 
-    public void updatePermissions(boolean uploadPermission, boolean pushPermission) {
-        this.uploadPermission = uploadPermission;
+    public void updatePermissions(boolean fileUploadPermission, boolean pushPermission) {
+        this.fileUploadPermission = fileUploadPermission;
         this.pushPermission = pushPermission;
     }
 }

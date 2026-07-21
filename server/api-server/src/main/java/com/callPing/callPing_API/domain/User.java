@@ -93,7 +93,6 @@ public class User {
     }
 
     // [최현수] 로그인 실패 시 카운트 증가 및 5회 도달 시 자동 잠금 제어 로직
-
     public void increaseFailedLoginCount() {
         if (this.isLocked) {
             return;
@@ -105,7 +104,6 @@ public class User {
     }
 
     // [최현수] 계정 잠금 해제 및 실패 카운트 초기화 'PATCH /api/v1/users/account-unlock' 연동용 비즈니스 메서드
-
     public void unlockAccount() {
         this.isLocked = false;
         this.failedLoginCount = 0;
