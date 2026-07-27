@@ -9,7 +9,7 @@ import com.callPing.callPing_API.dto.response.session.LoginResponseDTO;
 import com.callPing.callPing_API.dto.response.user.*;
 import com.callPing.callPing_API.repository.UserRepository;
 import com.callPing.callPing_API.repository.UserSettingRepository;
-import com.callPing.callPing_API.security.*; ////JWT 프로바이더 추가
+import com.callPing.callPing_API.security.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,7 +36,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
 
     // JWT 토큰 프로바이더 주입
-    // private final JwtProvider jwtProvider;
+    private final JwtProvider jwtProvider;
 
     private final JavaMailSender mailSender;
     private final StringRedisTemplate redisTemplate;
@@ -51,6 +51,9 @@ public class UserServiceImpl implements UserService {
     private static final long VERIFIED_EMAIL_EXPIRATION_MINUTES = 30; // 인증완료 상태 유효시간 30분
     private static final int MAX_FAIL_COUNT = 5; // 최대 실패 허용 횟수
     private static final long LOCK_TIME_MINUTES = 30; // 5회 실패 시 30분 잠금
+
+    private static final String EMAIL_CHANGE_CODE_PREFIX = "EMAIL_CHANGE_CODE:";
+    private static final String EMAIL_CHANGE_TARGET_PREFIX = "EMAIL_CHANGE_TARGET:";
 
     // =================================================================================
     // #1. 로그인/회원가입 로직
@@ -104,22 +107,28 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public SignUpResponseDTO signUp(SignUpRequestDTO requestDTO) {
+        // 1. 필수 약관 동의 여부 방어 로직 추가
+        if (!requestDTO.termsAgreed()) {
+            throw new IllegalArgumentException("USER_ERR_TERMS_NOT_AGREED: 필수 약관에 동의해야 합니다.");
+        }
+
         if (userRepository.existsByLoginId(requestDTO.loginId())) {
             throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
         }
 
-        // 유저 생성 및 저장
+        // 2. 유저 생성 및 저장
         String encodedPassword = passwordEncoder.encode(requestDTO.password());
 
         User user = User.builder()
                 .loginId(requestDTO.loginId())
                 .password(encodedPassword)
                 .email(requestDTO.email())
+                .termsAgreed(requestDTO.termsAgreed())
                 .build();
 
         User savedUser = userRepository.save(user);
 
-        // 유저 기본 설정 생성
+        // 3. 유저 기본 설정 생성
         UserSetting defaultSetting = UserSetting.builder()
                 .user(savedUser)
                 .fileUploadPermission(false)
@@ -127,13 +136,13 @@ public class UserServiceImpl implements UserService {
                 .build();
         userSettingRepository.save(defaultSetting);
 
-        // 5. 사용된 인증 상태 만료 처리 (재사용 방지)
+        // 4. 사용된 인증 상태 만료 처리 (재사용 방지)
         redisTemplate.delete(VERIFIED_EMAIL_PREFIX + requestDTO.email());
 
         return new SignUpResponseDTO(
                 savedUser.getId(),
                 savedUser.getLoginId(),
-                OffsetDateTime.now() // Auditing이 적용되어 있다면 user.getCreatedAt() 사용 권장
+                OffsetDateTime.now() // 추후 user.getCreatedAt() 사용
         );
     }
 
@@ -171,13 +180,13 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByLoginId(requestDTO.loginId())
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
-        // 요청된 이메일이 해당 아이디의 실제 이메일과 맞는지 교차 검증
+        //요청된 이메일이 해당 아이디의 실제 이메일과 맞는지 교차 검증
         if (!user.getEmail().equals(requestDTO.email())) {
             throw new IllegalArgumentException("회원 정보가 일치하지 않습니다.");
         }
 
         String encodedPassword = passwordEncoder.encode(requestDTO.password());
-        user.changePassword(encodedPassword); // User 엔티티 내에 changePassword 메서드 필요
+        user.changePassword(encodedPassword);
     }
 
     // =================================================================================
@@ -239,6 +248,51 @@ public class UserServiceImpl implements UserService {
     }
 
     // =================================================================================
+    // #4. 계정 잠금 해제 로직
+    // =================================================================================
+
+    @Override
+    public void sendUnlockEmailVerification(EmailVerificationRequestDTO requestDTO) {
+        if (!userRepository.existsByEmail(requestDTO.email())) {
+            throw new IllegalArgumentException("가입되지 않은 이메일입니다.");
+        }
+        sendAndStoreVerificationCode(requestDTO.email());
+        log.info("잠금 해제용 이메일 발송 완료: email={}", requestDTO.email());
+    }
+
+    @Override
+    @Transactional
+    public void unlockAccount(AccountUnlockRequestDTO requestDTO) {
+        User user = userRepository.findByLoginId(requestDTO.loginId())
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+
+        //1. 요청된 이메일이 해당 아이디의 실제 이메일과 맞는지 교차 검증
+        if (!user.getEmail().equals(requestDTO.email())) {
+            throw new IllegalArgumentException("USER_ERR_CURRENT_EMAIL_MISMATCH: 회원 정보에 등록된 이메일과 일치하지 않습니다.");
+        }
+
+        //2. 이메일 인증이 성공적으로 완료된 상태인지 확인
+        String verifiedStatus = redisTemplate.opsForValue().get(VERIFIED_EMAIL_PREFIX + requestDTO.email());
+        if (!"VERIFIED".equals(verifiedStatus)) {
+            throw new IllegalArgumentException("AUTH_ERR_NOT_VERIFIED: 이메일 인증이 완료되지 않았거나 만료되었습니다.");
+        }
+
+        //3. 잠금 해제 처리 (Redis 실패 카운트 삭제)
+        String failKey = FAIL_COUNT_PREFIX + requestDTO.loginId();
+
+        if (Boolean.FALSE.equals(redisTemplate.hasKey(failKey))) {
+            throw new IllegalArgumentException("AUTH_ERR_ACCOUNT_NOT_LOCKED: 잠금 처리된 계정이 아닙니다.");
+        }
+
+        redisTemplate.delete(failKey);
+
+        // 4. 인증 완료 상태(VERIFIED) 초기화 (재사용 방지)
+        redisTemplate.delete(VERIFIED_EMAIL_PREFIX + requestDTO.email());
+
+        log.info("계정 잠금 해제 완료: loginId={}", requestDTO.loginId());
+    }
+
+    // =================================================================================
     // 기존 로직
     // =================================================================================
 
@@ -252,25 +306,76 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void updatePassword(Long userId, PasswordChangeRequestDTO requestDTO) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("아이디를 찾을 수 없습니다."));
+        User user = getUserById(userId);
 
-        String encodedPassword = passwordEncoder.encode(requestDTO.password());
+        //현재 비밀번호가 맞는지 검증
+        if (!passwordEncoder.matches(requestDTO.currentPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("USER_ERR_INVALID_PASSWORD: 현재 비밀번호가 일치하지 않습니다.");
+        }
+
+        // 새 비밀번호를 암호화하여 저장
+        String encodedPassword = passwordEncoder.encode(requestDTO.newPassword());
         user.changePassword(encodedPassword);
+
+        log.info("비밀번호 변경 완료: userId={}", userId);
+    }
+
+    @Override
+    public void sendEmailChangeVerification(Long userId, EmailChangeVerificationRequestDTO requestDTO) {
+        User user = getUserById(userId);
+
+        //1. 현재 메일 본인확인 검증
+        if(!user.getEmail().equals(requestDTO.currentEmail())){
+            throw new IllegalArgumentException("USER_ERR_CURRENT_EMAIL_MISMATCH: 현재 이메일 정보가 일치하지 않습니다.");
+        }
+        //2. 새 이메일 중복 검증
+        if (userRepository.existsByEmail(requestDTO.newEmail())) {
+            throw new IllegalArgumentException("USER_ERR_DUPLICATED_EMAIL: 이미 사용 중인 이메일 주소입니다.");
+        }
+        //3. 인증 코드 생성 및 Redis 저장 (코드, 타겟 이메일 2가지를 묶어서 관리)
+        String verificationCode = generateRandomCode();
+
+        redisTemplate.opsForValue().set(
+                EMAIL_CHANGE_CODE_PREFIX + userId,
+                verificationCode,
+                Duration.ofMinutes(AUTH_CODE_EXPIRATION_MINUTES)
+        );
+        redisTemplate.opsForValue().set(
+                EMAIL_CHANGE_TARGET_PREFIX + userId,
+                requestDTO.newEmail(),
+                Duration.ofMinutes(AUTH_CODE_EXPIRATION_MINUTES)
+        );
+
+        //4. 새 이메일로 발송
+        sendEmail(requestDTO.newEmail(), verificationCode);
+        log.info("이메일 변경용 인증코드 발송 완료: userId={}, targetEmail={}", userId, requestDTO.newEmail());
     }
 
     @Override
     @Transactional
-    public EmailChangeResponseDTO updateEmail(Long userId, EmailChangeRequestDTO requestDTO) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("아이디를 찾을 수 없습니다."));
+    public void verifyAndChangeEmail(Long userId, EmailChangeVerificationCheckRequestDTO requestDTO) {
+        //1. Redis에서 인증 코드 조회 및 검증
+        String storedCode = redisTemplate.opsForValue().get(EMAIL_CHANGE_CODE_PREFIX + userId);
 
-        if (userRepository.existsByEmail(requestDTO.email())) {
-            throw new IllegalArgumentException("이미 등록된 이메일입니다.");
+        if (storedCode == null || !storedCode.equals(requestDTO.verificationCode())) {
+            throw new IllegalArgumentException("AUTH_ERR_INVALID_CODE: 인증번호가 일치하지 않거나 만료되었습니다.");
         }
 
-        user.changeEmail(requestDTO.email());
-        return new EmailChangeResponseDTO(user.getEmail());
+        //2. Redis에서 새 이메일 꺼내기
+        String targetEmail = redisTemplate.opsForValue().get(EMAIL_CHANGE_TARGET_PREFIX + userId);
+        if (targetEmail == null) {
+            throw new IllegalArgumentException("AUTH_ERR_INVALID_CODE: 이메일 변경 요청 정보가 만료되었습니다. 처음부터 다시 시도해주세요.");
+        }
+
+        //3. 유저 정보 조회 및 이메일 즉시 변경
+        User user = getUserById(userId);
+        user.changeEmail(targetEmail);
+
+        //4. 보안을 위해 사용된 Redis 키 즉시 삭제
+        redisTemplate.delete(EMAIL_CHANGE_CODE_PREFIX + userId);
+        redisTemplate.delete(EMAIL_CHANGE_TARGET_PREFIX + userId);
+
+        log.info("이메일 성공적 변경 완료: userId={}, newEmail={}", userId, targetEmail);
     }
 
     @Override

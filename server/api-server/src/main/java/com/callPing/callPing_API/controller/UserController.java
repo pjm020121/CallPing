@@ -3,12 +3,16 @@ package com.callPing.callPing_API.controller;
 import com.callPing.callPing_API.dto.common.ApiResponse;
 import com.callPing.callPing_API.dto.request.user.*;
 import com.callPing.callPing_API.dto.response.user.*;
+import com.callPing.callPing_API.security.UserPrincipal;
 import com.callPing.callPing_API.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import com.callPing.callPing_API.security.UserPrincipal;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -16,9 +20,6 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
-
-    // TODO: (DB/Security 연동 이후) @AuthenticationPrincipal을 사용하여 실제 로그인된 유저 ID로 대체
-    private final Long mockLoginUserId = 1L;
 
     // =================================================================================
     // #1. 회원가입 프로세스
@@ -48,12 +49,11 @@ public class UserController {
 
     @PostMapping("/check-id")
     public ResponseEntity<ApiResponse<Void>> checkLoginId(
-            @Valid @RequestBody CheckIdRequestDTO requestDTO, // JSON body로 매핑 (login_id)
+            @Valid @RequestBody CheckIdRequestDTO requestDTO,
             HttpServletRequest request) {
 
         boolean isAvailable = userService.checkLoginIdAvailable(requestDTO.loginId());
 
-        // 사용 불가한 경우 예외를 던지거나 409 상태코드를 응답하도록 설계할 수 있습니다 (여기서는 명세대로 200 응답 가정)
         if (!isAvailable) {
             throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
         }
@@ -149,12 +149,16 @@ public class UserController {
     }
 
     // =================================================================================
-    // #4. 로그인 된 사용자 계정/권한 관리 (/me)
+    // #4. 로그인 된 사용자 계정/권한 관리 (/me) - Security 연동 완료
     // =================================================================================
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<UserProfileResponseDTO>> getMyProfile(HttpServletRequest request) {
-        UserProfileResponseDTO responseData = userService.getMyProfile(mockLoginUserId);
+    public ResponseEntity<ApiResponse<UserProfileResponseDTO>> getMyProfile(
+            @AuthenticationPrincipal UserPrincipal userDetails,
+            HttpServletRequest request) {
+
+        // 로그인된 유저의 ID를 userDetails 객체에서 추출하여 서비스로 전달합니다.
+        UserProfileResponseDTO responseData = userService.getMyProfile(userDetails.getUserId());
         return ResponseEntity.ok(ApiResponse.success(
                 200, "USER_PROFILE_FETCHED", "회원 정보 조회가 완료되었습니다.", request.getRequestURI(), responseData
         ));
@@ -162,38 +166,57 @@ public class UserController {
 
     @PatchMapping("/me/account/password")
     public ResponseEntity<ApiResponse<Void>> updatePassword(
+            @AuthenticationPrincipal UserPrincipal userDetails,
             @Valid @RequestBody PasswordChangeRequestDTO requestDTO,
             HttpServletRequest request) {
 
-        userService.updatePassword(mockLoginUserId, requestDTO);
+        userService.updatePassword(userDetails.getUserId(), requestDTO);
         return ResponseEntity.ok(ApiResponse.success(
                 200, "USER_PASSWORD_CHANGED", "비밀번호가 안전하게 변경되었습니다.", request.getRequestURI(), null
         ));
     }
 
-    @PatchMapping("/me/account/email")
-    public ResponseEntity<ApiResponse<EmailChangeResponseDTO>> updateEmail(
-            @Valid @RequestBody EmailChangeRequestDTO requestDTO,
+    @PostMapping("/me/account/email/verification")
+    public ResponseEntity<ApiResponse<Void>> sendEmailChangeVerification(
+            @AuthenticationPrincipal UserPrincipal userDetails,
+            @Valid @RequestBody EmailChangeVerificationRequestDTO requestDTO,
             HttpServletRequest request) {
 
-        // EmailChangeResponseDTO가 반환되지만 명세서에 data: null 이므로 Void 리턴으로 변경 가능(현재는 DTO 유지)
-        userService.updateEmail(mockLoginUserId, requestDTO);
+        userService.sendEmailChangeVerification(userDetails.getUserId(), requestDTO);
         return ResponseEntity.ok(ApiResponse.success(
-                200, "USER_EMAIL_CHANGED", "이메일 주소가 변경되었습니다.", request.getRequestURI(), null
+                200, "USER_EMAIL_CHANGE_CODE_SENT", "새 이메일 주소로 인증 코드가 발송되었습니다.", request.getRequestURI(), null
+        ));
+    }
+
+    @PatchMapping("/me/account/email/verification/check")
+    public ResponseEntity<ApiResponse<Void>> verifyAndChangeEmail(
+            @AuthenticationPrincipal UserPrincipal userDetails,
+            @Valid @RequestBody EmailChangeVerificationCheckRequestDTO requestDTO,
+            HttpServletRequest request) {
+
+        userService.verifyAndChangeEmail(userDetails.getUserId(), requestDTO);
+        return ResponseEntity.ok(ApiResponse.success(
+                200, "USER_EMAIL_CHANGED", "이메일이 성공적으로 변경되었습니다.", request.getRequestURI(), null
         ));
     }
 
     @DeleteMapping("/me/account")
-    public ResponseEntity<ApiResponse<Void>> deleteAccount(HttpServletRequest request) {
-        userService.deleteAccount(mockLoginUserId);
+    public ResponseEntity<ApiResponse<Void>> deleteAccount(
+            @AuthenticationPrincipal UserPrincipal userDetails,
+            HttpServletRequest request) {
+
+        userService.deleteAccount(userDetails.getUserId());
         return ResponseEntity.ok(ApiResponse.success(
                 200, "USER_ACCOUNT_DELETED", "회원 탈퇴가 정상적으로 처리되었습니다.", request.getRequestURI(), null
         ));
     }
 
     @GetMapping("/me/permissions")
-    public ResponseEntity<ApiResponse<PermissionsResponseDTO>> getPermissions(HttpServletRequest request) {
-        PermissionsResponseDTO responseData = userService.getPermissions(mockLoginUserId);
+    public ResponseEntity<ApiResponse<PermissionsResponseDTO>> getPermissions(
+            @AuthenticationPrincipal UserPrincipal userDetails,
+            HttpServletRequest request) {
+
+        PermissionsResponseDTO responseData = userService.getPermissions(userDetails.getUserId());
         return ResponseEntity.ok(ApiResponse.success(
                 200, "USER_PERMISSIONS_FETCHED", "사용자 권한 설정 조회가 완료되었습니다.", request.getRequestURI(), responseData
         ));
@@ -201,12 +224,51 @@ public class UserController {
 
     @PatchMapping("/me/permissions")
     public ResponseEntity<ApiResponse<Void>> updatePermissions(
+            @AuthenticationPrincipal UserPrincipal userDetails,
             @Valid @RequestBody PermissionsUpdateRequestDTO requestDTO,
             HttpServletRequest request) {
 
-        userService.updatePermissions(mockLoginUserId, requestDTO);
+        userService.updatePermissions(userDetails.getUserId(), requestDTO);
         return ResponseEntity.ok(ApiResponse.success(
                 200, "USER_PERMISSIONS_UPDATED", "권한 설정이 변경되었습니다.", request.getRequestURI(), null
         ));
     }
+
+    // =================================================================================
+    // #5. 계정 잠금 해제 프로세스
+    // =================================================================================
+
+    @PostMapping("/unlock/email-verification")
+    public ResponseEntity<ApiResponse<Void>> sendUnlockEmail(
+            @Valid @RequestBody EmailVerificationRequestDTO requestDTO,
+            HttpServletRequest request) {
+
+        userService.sendUnlockEmailVerification(requestDTO);
+        return ResponseEntity.ok(ApiResponse.success(
+                200, "USER_UNLOCK_CODE_SENT", "입력하신 이메일로 잠금 해제용 인증 코드가 발송되었습니다.", request.getRequestURI(), null
+        ));
+    }
+
+    @PostMapping("/unlock/email-verification/check")
+    public ResponseEntity<ApiResponse<Void>> verifyUnlockEmail(
+            @Valid @RequestBody EmailVerificationCheckRequestDTO requestDTO,
+            HttpServletRequest request) {
+
+        userService.checkEmailVerification(requestDTO);
+        return ResponseEntity.ok(ApiResponse.success(
+                200, "USER_UNLOCK_CODE_VERIFIED", "이메일 인증이 완료되었습니다.", request.getRequestURI(), null
+        ));
+    }
+
+    @PatchMapping("/unlock")
+    public ResponseEntity<ApiResponse<Void>> unlockAccount(
+            @Valid @RequestBody AccountUnlockRequestDTO requestDTO,
+            HttpServletRequest request) {
+
+        userService.unlockAccount(requestDTO);
+        return ResponseEntity.ok(ApiResponse.success(
+                200, "USER_ACCOUNT_UNLOCKED", "계정 잠금이 성공적으로 해제되었습니다.", request.getRequestURI(), null
+        ));
+    }
+
 }

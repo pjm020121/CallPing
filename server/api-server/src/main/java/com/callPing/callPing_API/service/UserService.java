@@ -45,8 +45,14 @@ public interface UserService {
     // [PATCH] 로그인 상태에서 비밀번호 변경
     void updatePassword(Long userId, PasswordChangeRequestDTO requestDTO);
 
-    // [PATCH] 계정 이메일 주소 변경
-    EmailChangeResponseDTO updateEmail(Long userId, EmailChangeRequestDTO requestDTO);
+//    // [PATCH] 계정 이메일 주소 변경 --> 삭제
+//    void updateEmail(Long userId, EmailChangeRequestDTO requestDTO);
+
+    // [POST] 이메일 변경 1단계: 본인 확인 및 새 이메일로 인증번호 발송
+    void sendEmailChangeVerification(Long userId, EmailChangeVerificationRequestDTO requestDTO);
+
+    // [PATCH] 이메일 변경 2단계: 인증번호 검증 및 즉시 이메일 변경
+    void verifyAndChangeEmail(Long userId, EmailChangeVerificationCheckRequestDTO requestDTO);
 
     // [DELETE] 회원 탈퇴 처리
     void deleteAccount(Long userId);
@@ -60,6 +66,10 @@ public interface UserService {
     // [PATCH] FCM 토큰 등록 및 갱신
     void updateFcmToken(Long userId, FcmTokenUpdateRequestDTO requestDTO);
 
+    // [POST] 잠금 해제용 이메일 인증번호 발송
+    void sendUnlockEmailVerification(EmailVerificationRequestDTO requestDTO);
 
+    // [PATCH] 계정 잠금 최종 해제
+    void unlockAccount(AccountUnlockRequestDTO requestDTO);
 
 }

@@ -40,6 +40,9 @@ public class User {
     @Column(name = "failed_login_count", nullable = false)
     private Integer failedLoginCount = 0;
 
+    @Column(name = "terms_Agreed", nullable = false)
+    private Boolean termsAgreed = false;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)
     private LocalDateTime createdAt;
@@ -51,12 +54,13 @@ public class User {
     // [객체 생성을 위한 빌더 패턴]
     // 가입 시 최초 필요한 필수 필드만 명확하게 정의하여 무분별한 인스턴스 생성을 방지
     @Builder
-    private User(String loginId, String password, String email) {
+    private User(String loginId, String password, String email, Boolean termsAgreed) {
         this.loginId = loginId;
         this.password = password;
         this.email = email;
         this.isLocked = false;
         this.failedLoginCount = 0;
+        this.termsAgreed = termsAgreed;
     }
 
     // ==========================================
