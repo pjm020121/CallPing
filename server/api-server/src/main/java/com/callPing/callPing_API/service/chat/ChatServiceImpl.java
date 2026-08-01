@@ -25,9 +25,9 @@ public class ChatServiceImpl implements ChatService {
     private static final String NO_ANSWER_MESSAGE = "AI 답변 생성이 시작되기 전에 중단되었습니다.";
 
     @Override
-    public ChatRoomResponseDTO createRoom() {
+    public ChatRoomResponseDTO createRoom(Long currentUserId) {
         ChatRoom room = new ChatRoom();
-        room.setUserId(1L); // TODO: 로그인 붙으면 SecurityContext에서 꺼내서 세팅
+        room.setUserId(currentUserId);
         ChatRoom saved = chatRoomRepository.save(room);
 
         return new ChatRoomResponseDTO(
@@ -38,8 +38,8 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public List<ChatRoomResponseDTO> getRooms() {
-        List<ChatRoomResponseDTO> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc().stream()
+    public List<ChatRoomResponseDTO> getRooms(Long currentUserId) {
+        List<ChatRoomResponseDTO> rooms = chatRoomRepository.findAllByUserIdOrderByCreatedAtDesc(currentUserId).stream()
                 .map(room -> new ChatRoomResponseDTO(
                         room.getRoomId(), room.getTitle(), room.getCreatedAt()))
                 .toList();
@@ -52,10 +52,14 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public List<ChatRoomDetailResponseDTO> getRoomDetail(Long roomId) {
-        chatRoomRepository.findById(roomId)
+    public List<ChatRoomDetailResponseDTO> getRoomDetail(Long roomId, Long currentUserId) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
                 .orElseThrow(() -> new ApiException(
                         404, "CHAT_ERR_ROOM_NOT_FOUND", "존재하지 않는 채팅방입니다."));
+
+        if (!room.getUserId().equals(currentUserId)) {
+            throw new ApiException(403, "CHAT_ERR_ACCESS_DENIED", "해당 채팅방 내역을 볼 수 있는 권한이 없습니다.");
+        }
 
         return chatHistoryRepository.findAllByRoomIdOrderByCreatedAtAsc(roomId).stream()
                 .map(chat -> new ChatRoomDetailResponseDTO(
@@ -69,11 +73,15 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     @Transactional
-    public ChatResponseDTO askQuestion(ChatRequestDTO request) {
+    public ChatResponseDTO askQuestion(ChatRequestDTO request, Long currentUserId) {
 
         ChatRoom room = chatRoomRepository.findById(request.roomId())
                 .orElseThrow(() -> new ApiException(
                         404, "CHAT_ERR_ROOM_NOT_FOUND", "존재하지 않는 채팅방입니다."));
+
+        if (!room.getUserId().equals(currentUserId)) {
+            throw new ApiException(403, "CHAT_ERR_ACCESS_DENIED", "해당 채팅방에 질문할 수 있는 권한이 없습니다.");
+        }
 
         String answer = ragClient.query(request.question());
 
@@ -104,7 +112,7 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     @Transactional
-    public void stopGeneration(Long roomId, ChatStopRequestDTO request) {
+    public void stopGeneration(Long roomId, ChatStopRequestDTO request, Long currentUserId) {
 
         ChatHistory chat = chatHistoryRepository.findById(request.chatId())
                 .orElseThrow(() -> new ApiException(
@@ -113,6 +121,14 @@ public class ChatServiceImpl implements ChatService {
         if (!chat.getRoomId().equals(roomId)) {
             throw new ApiException(
                     400, "CHAT_ERR_ROOM_MISMATCH", "해당 채팅방의 채팅이 아닙니다.");
+        }
+
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new ApiException(
+                        404, "CHAT_ERR_ROOM_NOT_FOUND", "존재하지 않는 채팅방입니다."));
+
+        if (!room.getUserId().equals(currentUserId)) {
+            throw new ApiException(403, "CHAT_ERR_ACCESS_DENIED", "해당 채팅에 대한 권한이 없습니다.");
         }
 
         String finalAnswer = (request.answer() == null || request.answer().isBlank())
@@ -125,11 +141,19 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     @Transactional
-    public ChatDeleteResponseDTO deleteChat(Long chatId) {
+    public ChatDeleteResponseDTO deleteChat(Long chatId, Long currentUserId) {
 
         ChatHistory chat = chatHistoryRepository.findById(chatId)
                 .orElseThrow(() -> new ApiException(
                         404, "CHAT_ERR_NOT_FOUND", "존재하지 않는 채팅입니다."));
+
+        ChatRoom room = chatRoomRepository.findById(chat.getRoomId())
+                .orElseThrow(() -> new ApiException(
+                        404, "CHAT_ERR_ROOM_NOT_FOUND", "존재하지 않는 채팅방입니다."));
+
+        if (!room.getUserId().equals(currentUserId)) {
+            throw new ApiException(403, "CHAT_ERR_ACCESS_DENIED", "해당 채팅을 삭제할 수 있는 권한이 없습니다.");
+        }
 
         Long roomId = chat.getRoomId();
 
@@ -146,16 +170,15 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     @Transactional
-    public ChatRoomDeleteResponseDTO deleteRoom(Long roomId) {
+    public ChatRoomDeleteResponseDTO deleteRoom(Long roomId, Long currentUserId) {
 
-        chatRoomRepository.findById(roomId)
+        ChatRoom room = chatRoomRepository.findById(roomId)
                 .orElseThrow(() -> new ApiException(
                         404, "CHAT_ERR_ROOM_NOT_FOUND", "존재하지 않는 채팅방입니다."));
 
-        // TODO: 로그인 붙으면 소유자 검증 추가
-        // if (!room.getUserId().equals(currentUserId)) {
-        //     throw new ApiException(403, "CHAT_ERR_ACCESS_DENIED", "해당 채팅방을 삭제할 수 있는 권한이 없습니다.");
-        // }
+        if (!room.getUserId().equals(currentUserId)) {
+            throw new ApiException(403, "CHAT_ERR_ACCESS_DENIED", "해당 채팅방을 삭제할 수 있는 권한이 없습니다.");
+        }
 
         chatHistoryRepository.deleteAllByRoomId(roomId);
         chatRoomRepository.deleteById(roomId);
