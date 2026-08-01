@@ -30,6 +30,22 @@ dependencies {
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
+
+	// security 의존성 추가 (0713)
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+
+	// Redis 연동,  메일 발송 의존성 추가 (0720)
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
+
+	runtimeOnly 'org.postgresql:postgresql'
+
+	// jwt
+	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+	// 출처: https://shs00925.tistory.com/407 [shs00925 공부 블로그:티스토리]
+
 }
 
 tasks.named('test') {
