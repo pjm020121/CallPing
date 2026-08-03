@@ -5,7 +5,7 @@ package com.callPing.callPing_API.dto.response.session;
  * - POST /sessions
  */
 public record LoginResponseDTO(
-        Long sessionId,
+        String accessToken,  // Long sessionId -> String accessToken 으로 변경
         Long userId,
         String refreshToken
 ) {}
