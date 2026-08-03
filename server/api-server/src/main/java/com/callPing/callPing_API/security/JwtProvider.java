@@ -25,7 +25,7 @@ import java.util.Date;
 @RequiredArgsConstructor
 public class JwtProvider {
 
-    // application.yml 에 설정된 비밀키와 만료시간을 가져옵니다.
+    // application.properties 에 설정된 비밀키와 만료시간 지정
     @Value("${jwt.secret}")
     private String secretKeyString;
 
@@ -67,7 +67,7 @@ public class JwtProvider {
         return false;
     }
 
-    // 3. 토큰에서 인증 정보(Authentication) 추출 -> SecurityContext 에 저장하기 위함
+    // 3. 토큰에서 인증 정보 추출 -> SecurityContext 에 저장하기 위함
     public Authentication getAuthentication(String token) {
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(secretKey)
@@ -77,7 +77,7 @@ public class JwtProvider {
 
         String loginId = claims.getSubject();
 
-        // 앞서 만든 UserPrincipalService 를 통해 DB에서 유저 정보를 가져옴
+        // UserPrincipalService 를 통해 DB에서 유저 정보를 가져옴
         UserDetails userDetails = userPrincipalService.loadUserByUsername(loginId);
 
         // SecurityContext 에 넣을 인증 완료 객체 생성 (비밀번호는 보안상 빈 문자열 처리)
