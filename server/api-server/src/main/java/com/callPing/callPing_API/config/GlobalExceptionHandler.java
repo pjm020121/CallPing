@@ -9,7 +9,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -17,7 +19,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Void>> handleApiException(
             ApiException e, HttpServletRequest request) {
-
         return ResponseEntity.status(e.getStatus()).body(
                 ApiResponse.fail(e.getStatus(), e.getCode(), e.getMessage(), request.getRequestURI())
         );
@@ -27,7 +28,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResponse<Void>> handleResponseStatusException(
             ResponseStatusException e, HttpServletRequest request) {
-
+        log.error("[Global Exception] Internal Server Error: ", e);
         int status = e.getStatusCode().value();
         return ResponseEntity.status(status).body(
                 ApiResponse.fail(status, "ERROR", e.getReason(), request.getRequestURI())

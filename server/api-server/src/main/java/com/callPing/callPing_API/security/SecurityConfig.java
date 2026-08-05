@@ -28,11 +28,19 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.sameOrigin())
+                )
+
                 // JWT 기반 인증 (세션 생성 X)
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        //0. h2 콘솔 허용 --> 추후 제외해도 되는 구문
+                        .requestMatchers("/h2-console/**").permitAll()
+
                         //1. 회원가입, 이메일 인증, 아이디 중복확인, 찾기, 비밀번호 재설정, 계정 잠금 해제는 누구나 접근 가능
                         .requestMatchers(
                                 "/api/v1/users",
