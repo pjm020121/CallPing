@@ -19,12 +19,10 @@ public class ChatHistory {
     @Column(name = "room_id", nullable = false)
     private Long roomId;
 
-    @Lob
-    @Column(name = "question", nullable = false)
+    @Column(name = "question", nullable = false, columnDefinition = "TEXT")
     private String question;
 
-    @Lob
-    @Column(name = "answer", nullable = false)
+    @Column(name = "answer", nullable = false, columnDefinition = "TEXT")
     private String answer;
 
     @Column(name = "created_at", nullable = false, updatable = false)

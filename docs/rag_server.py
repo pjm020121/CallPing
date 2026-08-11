@@ -255,14 +255,12 @@ def query(request: QueryRequest):
         search_query = user_input
         search_filter = None
 
-    logger.info(f"[DEBUG] search_query='{search_query}' / search_filter={search_filter}")
 
     if search_filter:
         search_filter = {k: v for k, v in search_filter.items() if v is not None}
         if not search_filter:
             search_filter = None
 
-    logger.info(f"검색어: '{search_query}' / 필터: {search_filter}")
 
     # STEP 2. 검색
     search_results = hierarchical_retrieval(search_query, search_filter, k=TOP_K)
@@ -270,14 +268,8 @@ def query(request: QueryRequest):
         [f"[자료 {i + 1}]\n{doc.page_content}" for i, doc in enumerate(search_results)]
     )
 
-    context_text = "\n\n".join(
-        [f"[자료 {i + 1}]\n{doc.page_content}" for i, doc in enumerate(search_results)]
-    )
-    logger.info(f"[DEBUG] 검색된 문서 개수: {len(search_results)}")
-    logger.info(f"[DEBUG] context_text:\n{context_text}")
 
     # STEP 3. 최종 답변 생성
     answer = call_gemini(build_qa_prompt(user_input, context_text))
-    logger.info(f"[DEBUG] 최종 답변:\n{answer}")  # ← 이 줄 추가
 
     return QueryResponse(answer=answer)
