@@ -38,21 +38,21 @@ public class CallRecord {
     @OneToMany(mappedBy = "callRecord", cascade = CascadeType.ALL)
     private List<CallTranscript> transcripts = new ArrayList<>();
 
-    // 1. 연관관계 편의 메서드 (문장을 리스트에 추가)
+    // 연관관계 편의 메서드 (문장을 리스트에 추가)
     public void addTranscript(CallTranscript transcript) {
         this.transcripts.add(transcript);
-        // 참고: CallTranscript 엔티티 쪽에도 setCallRecord() 또는 생성자로
-        // 맵핑해주는 로직이 필요합니다. (아래 주의사항 참고)
+        // CallTranscript 엔티티 쪽에도 setCallRecord() 또는 생성자로
+        // 맵핑해주는 로직이 필요
     }
 
-    // 2. AI 분석 완료 후 결과 업데이트
+    // AI 분석 완료 후 결과 업데이트
     public void updateAiAnalysis(String expression, String feedback, String status) {
         this.expression = expression;
         this.feedback = feedback;
         this.analysisStatus = status;
     }
 
-    // 3. 상태만 단독으로 변경 (실패 등)
+    // 상태만 단독으로 변경 (실패 등)
     public void updateStatus(String status) {
         this.analysisStatus = status;
     }
