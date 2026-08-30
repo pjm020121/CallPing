@@ -48,6 +48,13 @@ dependencies {
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
 	// 출처: https://shs00925.tistory.com/407 [shs00925 공부 블로그:티스토리]
 
+	// google STT
+	// GCS 파일 업로드
+	implementation 'com.google.cloud:google-cloud-storage:2.30.0'
+
+	// STT 변환
+	implementation 'com.google.cloud:google-cloud-speech:4.3.0'
+
 }
 
 tasks.named('test') {
