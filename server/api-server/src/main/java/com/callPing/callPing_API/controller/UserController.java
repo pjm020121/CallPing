@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import com.callPing.callPing_API.security.UserPrincipal;
 
 @RestController
-@RequestMapping("users")
+@RequestMapping("/users")
 @RequiredArgsConstructor
 public class UserController {
 

@@ -25,7 +25,12 @@ public class ChatServiceImpl implements ChatService {
     private static final String NO_ANSWER_MESSAGE = "AI 답변 생성이 시작되기 전에 중단되었습니다.";
 
     @Override
+    @Transactional   // ← 추가됨
     public ChatRoomResponseDTO createRoom(Long currentUserId) {
+
+        // 추가됨: 새 방 생성 전, 이 유저의 빈 방들 먼저 삭제
+        chatRoomRepository.deleteEmptyRoomsByUserId(currentUserId);
+
         ChatRoom room = new ChatRoom();
         room.setUserId(currentUserId);
         ChatRoom saved = chatRoomRepository.save(room);
