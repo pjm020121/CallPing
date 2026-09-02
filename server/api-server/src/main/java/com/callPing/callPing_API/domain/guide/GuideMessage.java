@@ -23,13 +23,17 @@ public class GuideMessage {
     @Column(columnDefinition = "TEXT")
     private String answer;
 
+    @Column(columnDefinition = "TEXT")
+    private String tips;
+
     private OffsetDateTime createdAt;
 
     @Builder
-    public GuideMessage(GuideSession guideSession, String question, String answer) {
+    public GuideMessage(GuideSession guideSession, String question, String answer, String tips) {
         this.guideSession = guideSession;
         this.question = question;
         this.answer = answer;
+        this.tips = tips;
         this.createdAt = OffsetDateTime.now();
     }
 }

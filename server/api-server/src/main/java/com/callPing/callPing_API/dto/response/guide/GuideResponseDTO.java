@@ -12,5 +12,6 @@ public record GuideResponseDTO(
         String title,
         String question,
         String answer,
+        String tips,
         OffsetDateTime createdAt
 ) {}

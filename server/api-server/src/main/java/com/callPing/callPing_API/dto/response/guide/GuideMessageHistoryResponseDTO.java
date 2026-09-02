@@ -10,5 +10,6 @@ public record GuideMessageHistoryResponseDTO(
         Long messageId,
         String question,
         String answer,
+        String tips,
         OffsetDateTime createdAt
 ) {}
