@@ -238,7 +238,7 @@ public class UserController {
     // #5. 계정 잠금 해제 프로세스
     // =================================================================================
 
-    @PostMapping("/unlock/email-verification")
+    @PostMapping("/account-unlock/email-verification")
     public ResponseEntity<ApiResponse<Void>> sendUnlockEmail(
             @Valid @RequestBody EmailVerificationRequestDTO requestDTO,
             HttpServletRequest request) {
@@ -249,7 +249,7 @@ public class UserController {
         ));
     }
 
-    @PostMapping("/unlock/email-verification/check")
+    @PostMapping("/account-unlock/email-verification/check")
     public ResponseEntity<ApiResponse<Void>> verifyUnlockEmail(
             @Valid @RequestBody EmailVerificationCheckRequestDTO requestDTO,
             HttpServletRequest request) {
@@ -260,7 +260,7 @@ public class UserController {
         ));
     }
 
-    @PatchMapping("/unlock")
+    @PatchMapping("/account-unlock")
     public ResponseEntity<ApiResponse<Void>> unlockAccount(
             @Valid @RequestBody AccountUnlockRequestDTO requestDTO,
             HttpServletRequest request) {
