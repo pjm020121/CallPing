@@ -4,6 +4,7 @@ import com.callPing.callPing_API.dto.common.ApiResponse;
 import com.callPing.callPing_API.exception.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -15,7 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // 우리가 직접 정의한 예외 (code 포함)
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Void>> handleApiException(
             ApiException e, HttpServletRequest request) {
@@ -34,7 +34,6 @@ public class GlobalExceptionHandler {
         );
     }
 
-    // @Valid 검증 실패 (DTO의 @NotBlank, @NotNull 등)
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidationException(
             MethodArgumentNotValidException e, HttpServletRequest request) {
@@ -46,6 +45,16 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(400).body(
                 ApiResponse.fail(400, "VALIDATION_ERROR", message, request.getRequestURI())
+        );
+    }
+
+    // 추가: Body가 없거나 JSON 형식이 깨진 경우
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException e, HttpServletRequest request) {
+
+        return ResponseEntity.status(400).body(
+                ApiResponse.fail(400, "INVALID_REQUEST_BODY", "요청 본문이 올바르지 않습니다.", request.getRequestURI())
         );
     }
 
@@ -62,8 +71,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(
             Exception e, HttpServletRequest request) {
 
-        log.error("[Unexpected Error] API: {}, Cause: ", request.getRequestURI(), e);
-        
+        log.error("[Global Exception] Unexpected error at {}: ", request.getRequestURI(), e);
+
         return ResponseEntity.status(500).body(
                 ApiResponse.fail(500, "INTERNAL_ERROR", "서버 오류가 발생했습니다.", request.getRequestURI())
         );
