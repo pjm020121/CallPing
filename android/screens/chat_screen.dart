@@ -1,4 +1,11 @@
+import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+// 서버 기본 주소
+const String BASE_URL = 'http://54.116.93.220:8080';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -10,62 +17,180 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
 
-  // 1. 사용자와 AI의 채팅을 구분하기 위해 Map 형태로 저장
-  // (예: isUser가 true면 사용자 채팅, false면 AI 채팅)
+  // 화면에 띄울 메시지 리스트
   final List<Map<String, dynamic>> _messages = [];
-
-  // 2. AI가 답변을 고민 중인지 확인하는 '로딩 상태' 스위치
   bool _isWaiting = false;
 
-  // 전송 버튼 누르기
-  void _sendMessage() async {
-    // 빈칸이거나, 이미 로딩 중이면 아무 작동도 안 함
-    if (_messageController.text.trim().isEmpty || _isWaiting) return;
+  // 현재 활성화된 방 번호 (서버가 줌)
+  int? _currentRoomId;
 
-    String text = _messageController.text;
+  @override
+  void initState() {
+    super.initState();
+    // 앱 켜면 빈 채팅방 생성
+    _startNewRoom();
+  }
 
+  // 임시 토큰 발급 함수 (나중에 로그인 연동 시 수정)
+  Future<String> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    // 실제로는 prefs.getString('access_token') 등을 가져옴
+    // 지금은 테스트용 가짜 토큰을 넣거나 비워둠
+    return prefs.getString('access_token') ?? "임시_토큰_값";
+  }
+
+  // [API] 1. 새 채팅방 생성 (POST /chats/rooms)
+  Future<void> _startNewRoom() async {
     setState(() {
-      // 사용자 말풍선을 리스트에 추가하고 입력창 비우기
-      _messages.add({'text': text, 'isUser': true});
-      _messageController.clear();
-      _isWaiting = true; // "이제 AI가 생각할 시간이야!" 라고 스위치 켜기
+      _messages.clear();
+      _isWaiting = true;
     });
 
-    // 5초 동안 AI가 생각하는 척 기다리는 효과 (진짜 서버랑 연결할 땐 이 부분이 바뀜)
-    await Future.delayed(const Duration(seconds: 5));
+    try {
+      String token = await _getToken();
+      final response = await http
+          .post(
+            Uri.parse('$BASE_URL/chats/rooms'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
-    // 5초가 지났는데도 사용자가 '중지'를 안 눌러서 _isWaiting이 그대로 true라면?
-    // -> AI의 답변을 화면에 띄운다
-    if (_isWaiting) {
+      if (response.statusCode == 201) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        setState(() {
+          _currentRoomId = data['roomId']; // 서버가 준 방 번호 저장
+        });
+      }
+    } catch (e) {
+      print("채팅방 생성 에러: $e");
+    } finally {
       setState(() {
-        _messages.add({'text': '콜핑 AI의 가짜 답변입니다', 'isUser': false});
-        _isWaiting = false; // 생각 끝! 스위치 끄기
+        _isWaiting = false;
       });
     }
   }
 
-  // 🛑 중지 버튼 누르기
+  // [API] 2. 질문하기 (POST /chats)
+  Future<void> _sendMessage() async {
+    // 빈칸이거나 로딩 중이면 무시
+    if (_messageController.text.trim().isEmpty || _isWaiting) return;
+
+    // 방 번호가 없으면 사용자에게 에러 팝업
+    if (_currentRoomId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('서버 연결 실패: 가짜 토큰이거나 서버가 닫혀있어 방을 만들지 못했습니다.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    String text = _messageController.text;
+    int requestedRoomId = _currentRoomId!; // 답변 꼬임 방지를 위한 꼬리표
+
+    setState(() {
+      _messages.add({'text': text, 'isUser': true});
+      _messageController.clear();
+      _isWaiting = true;
+    });
+
+    String aiAnswer = "";
+
+    try {
+      String token = await _getToken();
+
+      // 서버로 DTO 양식(roomId, question)에 맞춰 전송
+      final response = await http
+          .post(
+            Uri.parse('$BASE_URL/chats'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({'roomId': requestedRoomId, 'question': text}),
+          )
+          .timeout(const Duration(seconds: 60)); // 60초 타임아웃
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        aiAnswer = data['answer']; // DTO 명세서에 따른 'answer'
+      } else {
+        aiAnswer = '서버 응답 오류 (코드: ${response.statusCode})';
+      }
+    } catch (e) {
+      aiAnswer = '60초가 초과되었거나 네트워크 오류가 발생했습니다.';
+    }
+
+    if (mounted) {
+      // 답변이 왔을 때, 사용자가 방을 안 옮기고 기다렸다면 화면에 띄움
+      // 방을 옮겼다면, 백엔드 DB에 이미 저장됐으니 화면에 띄울 필요 없음
+      if (_currentRoomId == requestedRoomId) {
+        setState(() {
+          _messages.add({'text': aiAnswer, 'isUser': false});
+          _isWaiting = false;
+        });
+      }
+    }
+  }
+
   void _stopGenerating() {
     setState(() {
-      _isWaiting = false; // 생각 중 스위치를 강제로 꺼버림
-
-      // 방금 보낸 내 말풍선 지우기
-      if (_messages.isNotEmpty) {
-        // 화면에서 지우는 대신, 오타를 고칠 수 있게 입력창에 다시 글씨를 띄움
+      _isWaiting = false;
+      if (_messages.isNotEmpty && _messages.last['isUser'] == true) {
         _messageController.text = _messages.last['text'];
-
-        // 내 말풍선을 화면(리스트)에서 삭제
         _messages.removeLast();
       }
     });
+    // TODO: (선택) API 3번 - 서버에 중단 요청(ChatStopRequestDTO)을 보내는 로직을 추가할 수 있음
+  }
+
+  // [API] 특정 방의 과거 대화 불러오기 (GET /chats/rooms/{roomId})
+  Future<void> _loadRoomDetail(int roomId) async {
+    setState(() {
+      _messages.clear();
+      _isWaiting = true;
+      _currentRoomId = roomId; // 현재 방 번호 변경
+    });
+
+    try {
+      String token = await _getToken();
+      final response = await http
+          .get(
+            Uri.parse('$BASE_URL/chats/rooms/$roomId'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+        setState(() {
+          // 서버가 준 질문/답변 목록을 말풍선 리스트에 넣음
+          for (var item in data) {
+            _messages.add({'text': item['question'], 'isUser': true});
+            _messages.add({'text': item['answer'], 'isUser': false});
+          }
+        });
+      }
+    } catch (e) {
+      print("채팅방 조회 에러: $e");
+    } finally {
+      setState(() {
+        _isWaiting = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-
-      // 1. 햄버거 메뉴 (왼쪽 서랍)
       drawer: Drawer(
         backgroundColor: const Color(0xFFFCFCFC),
         child: SafeArea(
@@ -81,9 +206,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  setState(() {
-                    _messages.clear(); // 채팅 내역 지우고 새 채팅 시작
-                  });
+                  _startNewRoom(); // 새 채팅방을 서버에 요청
                 },
               ),
               ListTile(
@@ -92,48 +215,44 @@ class _ChatScreenState extends State<ChatScreen> {
                   '라이브러리',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  Navigator.push(
+
+                  // 라이브러리 화면으로 이동
+                  final selectedRoomId = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const ChatLibraryScreen(),
                     ),
                   );
+
+                  // 사용자가 방을 선택해서 돌아왔다면
+                  if (selectedRoomId != null && selectedRoomId is int) {
+                    _loadRoomDetail(selectedRoomId); // 서버에서 과거 대화 내역 받아옴
+                  }
                 },
               ),
             ],
           ),
         ),
       ),
-
-      // 2. 메인 채팅 화면
       body: SafeArea(
         child: Column(
           children: [
-            // 상단 햄버거 메뉴 버튼
             Padding(
               padding: const EdgeInsets.only(left: 16.0, top: 10.0),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Builder(
-                  builder: (context) {
-                    return IconButton(
-                      icon: const Icon(
-                        Icons.menu,
-                        size: 30,
-                        color: Colors.black,
-                      ),
-                      onPressed: () => Scaffold.of(context).openDrawer(),
-                    );
-                  },
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu, size: 30, color: Colors.black),
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                  ),
                 ),
               ),
             ),
-
-            // 채팅 내용이 보여질 공간
             Expanded(
-              child: _messages.isEmpty
+              child: _messages.isEmpty && !_isWaiting
                   ? const Center(
                       child: Text(
                         '무엇이든 물어보세요',
@@ -143,12 +262,10 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                     )
-                  // 💡 로딩 중일 때는 리스트 끝에 '로딩 말풍선' 하나를 더 추가
                   : ListView.builder(
                       padding: const EdgeInsets.all(20),
                       itemCount: _messages.length + (_isWaiting ? 1 : 0),
                       itemBuilder: (context, index) {
-                        // 1. AI 생각 중 (로딩) 말풍선
                         if (index == _messages.length && _isWaiting) {
                           return Align(
                             alignment: Alignment.centerLeft,
@@ -156,11 +273,11 @@ class _ChatScreenState extends State<ChatScreen> {
                               margin: const EdgeInsets.only(bottom: 12),
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: Colors.white, // AI 말풍선 배경 (흰색)
+                                color: Colors.white,
                                 border: Border.all(
                                   color: Colors.black,
                                   width: 1.5,
-                                ), // 검정 테두리
+                                ),
                                 borderRadius: BorderRadius.circular(15),
                               ),
                               child: const SizedBox(
@@ -174,8 +291,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           );
                         }
-
-                        // 2. 진짜 채팅 말풍선들
                         bool isUser = _messages[index]['isUser'];
                         return Align(
                           alignment: isUser
@@ -183,28 +298,20 @@ class _ChatScreenState extends State<ChatScreen> {
                               : Alignment.centerLeft,
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 12),
-                            // 그림 테두리 두께에 맞춰서 글씨가 밖으로 안 튀어나오게 안쪽 여백(padding)을 조절해 줘!
                             padding: const EdgeInsets.symmetric(
                               horizontal: 20,
                               vertical: 16,
                             ),
-
-                            // user_chat / ai_chat 이미지를 불러옴
-                            // 다시 이미지를 불러오되, centerSlice를 뺌
                             decoration: isUser
                                 ? const BoxDecoration(
                                     image: DecorationImage(
                                       image: AssetImage('assets/user_chat.png'),
-                                      // 🛑 여기가 범인이었어! 일단 이 줄을 꺼봐!
-                                      // centerSlice: Rect.fromLTRB(20, 20, 80, 80),
                                       fit: BoxFit.fill,
                                     ),
                                   )
                                 : const BoxDecoration(
                                     image: DecorationImage(
                                       image: AssetImage('assets/ai_chat.png'),
-                                      // 🛑 여기도 똑같이 꺼주기!
-                                      // centerSlice: Rect.fromLTRB(20, 20, 80, 80),
                                       fit: BoxFit.fill,
                                     ),
                                   ),
@@ -212,7 +319,6 @@ class _ChatScreenState extends State<ChatScreen> {
                               _messages[index]['text'],
                               style: const TextStyle(
                                 fontSize: 15,
-                                // 글씨 색상은 그림 배경색에 맞춰서 마음대로 바꿔도 됨
                                 color: Colors.black,
                               ),
                             ),
@@ -221,8 +327,6 @@ class _ChatScreenState extends State<ChatScreen> {
                       },
                     ),
             ),
-
-            // 하단 채팅 입력창
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 20.0,
@@ -242,14 +346,12 @@ class _ChatScreenState extends State<ChatScreen> {
                         controller: _messageController,
                         decoration: const InputDecoration(
                           hintText: '입력해주세요',
-                          hintStyle: TextStyle(color: Color(0xFF6B6868)),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
                           ),
                         ),
-                        // 💡 로딩 중일 때는 엔터 쳐도 안 쳐지게 막기
                         onSubmitted: _isWaiting
                             ? null
                             : (value) => _sendMessage(),
@@ -257,10 +359,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-
-                  // 전송 / 중지 버튼!
                   GestureDetector(
-                    // 💡 기다리는 중이면 '중지 함수'를, 아니면 '전송 함수'를 실행!
                     onTap: _isWaiting ? _stopGenerating : _sendMessage,
                     child: Container(
                       width: 45,
@@ -269,7 +368,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         color: Colors.black,
                         shape: BoxShape.circle,
                       ),
-                      // 💡 기다리는 중이면 네모(중지) 아이콘, 아니면 화살표(전송) 아이콘
                       child: Icon(
                         _isWaiting ? Icons.stop_rounded : Icons.arrow_upward,
                         color: Colors.white,
@@ -287,9 +385,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// -------------------------------------------------------------
-// 📚 라이브러리(채팅 내역) 화면
-// -------------------------------------------------------------
+// =============================================================
+// 라이브러리(채팅 내역) 화면 - 서버에서 불러옴
+// =============================================================
 class ChatLibraryScreen extends StatefulWidget {
   const ChatLibraryScreen({super.key});
 
@@ -298,11 +396,65 @@ class ChatLibraryScreen extends StatefulWidget {
 }
 
 class _ChatLibraryScreenState extends State<ChatLibraryScreen> {
-  // 가짜 채팅 내역 데이터
-  List<Map<String, String>> chatHistory = [
-    {'date': '7월 14일', 'title': '배송 지연으로 인한 제품 환불 가능 여부'},
-    {'date': '7월 10일', 'title': '단순 변심으로 구매 취소했을 때 반환 비용'},
-  ];
+  List<dynamic> _roomList = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRooms();
+  }
+
+  // 임시 토큰
+  Future<String> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('access_token') ?? "임시_토큰_값";
+  }
+
+  // [API] 과거 방 목록 불러오기 (GET /chats/rooms)
+  Future<void> _fetchRooms() async {
+    try {
+      String token = await _getToken();
+      final response = await http.get(
+        Uri.parse('$BASE_URL/chats/rooms'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _roomList = jsonDecode(utf8.decode(response.bodyBytes));
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // [API] 방 삭제 (DELETE /chats/rooms/{roomId})
+  Future<void> _deleteRoom(int roomId, int index) async {
+    setState(() {
+      _roomList.removeAt(index); // 화면에서 즉시 지움
+    });
+
+    try {
+      String token = await _getToken();
+      await http.delete(
+        Uri.parse('$BASE_URL/chats/rooms/$roomId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+    } catch (e) {
+      print("삭제 에러");
+    }
+  }
+
+  String _formatDate(String isoString) {
+    DateTime date = DateTime.parse(isoString).toLocal();
+    return '${date.month}월 ${date.day}일';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -311,63 +463,78 @@ class _ChatLibraryScreenState extends State<ChatLibraryScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        // 뒤로가기 버튼
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
+        title: const Text(
+          '라이브러리',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(24.0),
-        itemCount: chatHistory.length,
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 24.0),
-            // 💡 Row를 써서 글씨는 왼쪽, 휴지통은 오른쪽에 배치!
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. 날짜와 제목 (남은 공간을 다 차지하게 Expanded 사용)
-                Expanded(
-                  child: Column(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.black))
+          : _roomList.isEmpty
+          ? const Center(
+              child: Text(
+                '저장된 이전 대화가 없습니다.',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(24.0),
+              itemCount: _roomList.length,
+              itemBuilder: (context, index) {
+                final room = _roomList[index];
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 24.0),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        chatHistory[index]['date']!,
-                        style: const TextStyle(
-                          color: Color(0xFFA3A0A0),
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            // 방을 클릭하면, 서버의 roomId를 들고 돌아감
+                            Navigator.pop(context, room['roomId']);
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _formatDate(room['createdAt']),
+                                style: const TextStyle(
+                                  color: Color(0xFFA3A0A0),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                room['title'],
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        chatHistory[index]['title']!,
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.black54,
                         ),
+                        onPressed: () => _deleteRoom(room['roomId'], index),
                       ),
                     ],
                   ),
-                ),
-
-                // 2. 💡 개별 삭제(휴지통) 버튼!
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.black54),
-                  onPressed: () {
-                    // 휴지통을 누르면 그 줄(index)의 채팅 내역만 지워짐
-                    setState(() {
-                      chatHistory.removeAt(index);
-                    });
-                  },
-                ),
-              ],
+                );
+              },
             ),
-          );
-        },
-      ),
     );
   }
 }

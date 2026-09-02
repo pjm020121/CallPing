@@ -1,9 +1,11 @@
-// import 'package:callping/home_screen.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'api_service.dart';
 import 'home_screen.dart';
-
-// 💡 나중에 진짜 홈 화면(home_screen.dart) 파일을 만들면
-// 맨 윗줄에 그 파일을 import 해주고, 맨 밑에 있는 가짜 HomeScreen 클래스는 지워주면 돼!
+import 'find_id_screen.dart';
+import 'find_pw_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,11 +18,94 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _idController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  bool _isLoading = false;
+
   @override
   void dispose() {
     _idController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  // 백엔드 명세서에 맞춘 로그인 함수
+  Future<void> _handleLogin() async {
+    String inputId = _idController.text.trim();
+    String inputPassword = _passwordController.text.trim();
+
+    if (inputId.isEmpty || inputPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('아이디와 비밀번호를 입력해주세요!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // ⭐️ ApiService를 통한 깔끔한 통신
+      final response = await ApiService.login(
+        inputId,
+        inputPassword,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+
+        // 명세서에 따른 데이터 접근
+        final data = responseData['data'];
+        if (data != null && data['refresh_token'] != null) {
+          String token = data['refresh_token']; // 임시로 리프레시 토큰을 액세스 토큰으로 사용
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('access_token', token);
+
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+            );
+          }
+        }
+      } else if (response.statusCode == 401) {
+        _showErrorPopup('비밀번호가 일치하지 않습니다.');
+      } else if (response.statusCode == 403) {
+        _showErrorPopup('계정이 잠겼습니다. 이메일 인증으로 해제해주세요.');
+      } else if (response.statusCode == 404) {
+        _showErrorPopup('가입되지 않은 회원 정보입니다.');
+      } else {
+        _showErrorPopup('로그인에 실패했습니다.');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('서버와 연결할 수 없습니다. 다시 시도해주세요.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showErrorPopup(String message) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('로그인 실패'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('확인', style: TextStyle(color: Colors.black)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -34,7 +119,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 1. 콜핑 로고 타이틀
                 const Text(
                   'CallPing',
                   style: TextStyle(
@@ -44,8 +128,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 60),
-
-                // 2. 아이디 입력창
                 TextField(
                   controller: _idController,
                   decoration: InputDecoration(
@@ -60,8 +142,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // 3. 비밀번호 입력창
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
@@ -77,9 +157,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-
-                // 4. 로그인 버튼 (여기에 화면 이동 코드가 들어갔어!)
-                // 4. 완벽한 안전장치가 추가된 로그인 버튼
                 SizedBox(
                   width: double.infinity,
                   height: 55,
@@ -90,74 +167,33 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: () {
-                      String inputId = _idController.text;
-                      String inputPassword = _passwordController.text;
-
-                      // 🛑 1차 방어: 빈칸이 하나라도 있으면 경고창(SnackBar) 띄우기
-                      if (inputId.isEmpty || inputPassword.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('아이디와 비밀번호를 입력해주세요!'),
-                            backgroundColor: Colors.redAccent, // 빨간색 알림
-                            duration: Duration(seconds: 2), // 2초간 띄움
+                    onPressed: _isLoading ? null : _handleLogin,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Log in',
+                            style: TextStyle(color: Colors.white, fontSize: 20),
                           ),
-                        );
-                        return; // ⬅️ 여기서 코드를 멈추고 밑으로 안 내려감!
-                      }
-
-                      // 🛑 2차 방어: 가짜 DB 검사 (test / 1234가 아니면 막기)
-                      if (inputId != 'test' || inputPassword != '1234') {
-                        // 팝업창(Dialog) 띄우기
-                        showDialog(
-                          context: context,
-                          builder: (context) {
-                            return AlertDialog(
-                              title: const Text('로그인 실패'),
-                              content: const Text(
-                                '가입되지 않은 아이디이거나 비밀번호가 틀렸습니다. 회원가입을 먼저 진행해주세요.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(context); // 팝업창 닫기
-                                  },
-                                  child: const Text(
-                                    '확인',
-                                    style: TextStyle(color: Colors.black),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                        return; // ⬅️ 마찬가지로 틀렸으니 여기서 멈춤!
-                      }
-
-                      // 🟢 모든 검사를 통과했을 때만 (test / 1234 입력 시) 홈 화면으로 이동!
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const HomeScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      'Log in',
-                      style: TextStyle(color: Colors.white, fontSize: 20),
-                    ),
                   ),
                 ),
                 const SizedBox(height: 30),
-
-                // 5. 하단 텍스트 링크들
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     GestureDetector(
-                      onTap: () {
-                        print('아이디 찾기 클릭됨!');
-                      },
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const FindIdScreen(),
+                        ),
+                      ),
                       child: const Text(
                         '아이디 찾기',
                         style: TextStyle(
@@ -171,9 +207,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(color: Color(0xFFABABAB), fontSize: 12),
                     ),
                     GestureDetector(
-                      onTap: () {
-                        print('비밀번호 찾기 클릭됨!');
-                      },
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const FindPwScreen(),
+                        ),
+                      ),
                       child: const Text(
                         '비밀번호 찾기',
                         style: TextStyle(
@@ -187,9 +226,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(color: Color(0xFFABABAB), fontSize: 12),
                     ),
                     GestureDetector(
-                      onTap: () {
-                        print('회원가입 클릭됨!');
-                      },
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SignUpScreen(),
+                        ),
+                      ),
                       child: const Text(
                         '회원가입',
                         style: TextStyle(

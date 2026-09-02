@@ -24,7 +24,6 @@ public class GlobalExceptionHandler {
         );
     }
 
-    // 아직 ApiException으로 안 바꾼 기존 ResponseStatusException 호환용
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResponse<Void>> handleResponseStatusException(
             ResponseStatusException e, HttpServletRequest request) {
@@ -63,6 +62,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(
             Exception e, HttpServletRequest request) {
 
+        log.error("[Unexpected Error] API: {}, Cause: ", request.getRequestURI(), e);
+        
         return ResponseEntity.status(500).body(
                 ApiResponse.fail(500, "INTERNAL_ERROR", "서버 오류가 발생했습니다.", request.getRequestURI())
         );
