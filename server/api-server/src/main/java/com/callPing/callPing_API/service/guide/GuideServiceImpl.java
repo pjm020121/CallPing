@@ -119,7 +119,7 @@ public class GuideServiceImpl implements GuideService {
     // ==============================================================================
     private String requestLoRaAiModel(String questionText) {
         // TODO; 실제 엔드포인트 주소 확인 필수 => api/v1 제거로 인해 하단 링크가 맞음
-        String aiServerUrl = "http://127.0.0.1:18020/lora/generate";
+        String aiServerUrl = "http://127.0.0.1:18020/lora/guides";
 
         try {
             HttpHeaders headers = new HttpHeaders();
