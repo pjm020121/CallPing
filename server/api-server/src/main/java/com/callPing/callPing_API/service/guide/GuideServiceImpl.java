@@ -77,7 +77,7 @@ public class GuideServiceImpl implements GuideService {
                 .orElseThrow(() -> new IllegalArgumentException("접근 권한이 없거나 존재하지 않는 가이드입니다."));
 
         String[] parsedResponse = requestLoRaAiModel(request.question());
-        
+
         GuideMessage message = GuideMessage.builder()
                 .guideSession(session)
                 .question(request.question())
@@ -114,29 +114,29 @@ public class GuideServiceImpl implements GuideService {
     // ==============================================================================
     // AI 서버 통신 메서드
     // ==============================================================================
-    private String requestLoRaAiModel(String questionText) {
-        // TODO; 실제 엔드포인트 주소 확인 필수 => api/v1 제거로 인해 하단 링크가 맞음
+    private String[] requestLoRaAiModel(String situationText) {
         String aiServerUrl = "http://127.0.0.1:18020/lora/guides";
 
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            // 키값 수정 완료
+            // 키값 변경
             Map<String, Object> body = new HashMap<>();
             body.put("situation", situationText);
 
             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
-            log.info("LoRA AI 서버에 가이드 텍스트 생성 요청 중... 최대 60초 대기");
+            log.info("LoRA AI 서버에 가이드 텍스트 생성 요청 중...");
+
             ResponseEntity<Map> response = restTemplate.postForEntity(
                     aiServerUrl, requestEntity, Map.class
             );
-            
+
             Map<String, Object> responseBody = response.getBody();
+
             String answer = (String) responseBody.get("script");
-            log.info("LoRA AI 서버 응답 완료");
-            
+
             List<String> tipsList = (List<String>) responseBody.get("tips");
             String tips = "";
             if (tipsList != null && !tipsList.isEmpty()) {
@@ -147,9 +147,10 @@ public class GuideServiceImpl implements GuideService {
 
         } catch (Exception e) {
             log.error("LoRA AI 서버 통신 오류: ", e);
-            // 통신 실패 시 서버가 터지지 않게 안전한 기본 안내 문구 반환
-            return "현재 AI 모델이 혼잡하여 답변을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.";
+            return new String[]{
+                    "현재 AI 모델이 혼잡하여 답변을 생성할 수 없습니다.",
+                    "잠시 후 다시 시도해주세요."
+            };
         }
     }
-
 }
