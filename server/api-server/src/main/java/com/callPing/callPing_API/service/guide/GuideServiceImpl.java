@@ -53,16 +53,14 @@ public class GuideServiceImpl implements GuideService {
                 .build();
         guideSessionRepository.save(session);
 
-        String rawAiAnswer = requestLoRaAiModel(request.description());
-        String[] parsedResponse = parseLoRaResponse(rawAiAnswer);
-
-        String aiAnswer = requestLoRaAiModel(request.description());
+        String situation = "[" + request.category() + "] " + request.description();
+        String[] parsedResponse = requestLoRaAiModel(situation);
 
         GuideMessage message = GuideMessage.builder()
                 .guideSession(session)
                 .question(request.description())
-                .answer(parsedResponse[0])
-                .tips(parsedResponse[1])
+                .answer(parsedResponse[0]) // 대본
+                .tips(parsedResponse[1])   // 도움말
                 .build();
         guideMessageRepository.save(message);
 
@@ -78,8 +76,7 @@ public class GuideServiceImpl implements GuideService {
         GuideSession session = guideSessionRepository.findByIdAndUserId(guideId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("접근 권한이 없거나 존재하지 않는 가이드입니다."));
 
-        String rawAiAnswer = requestLoRaAiModel(request.question());
-        String[] parsedResponse = parseLoRaResponse(rawAiAnswer);
+        String[] parsedResponse = requestLoRaAiModel(request.question());
 
         GuideMessage message = GuideMessage.builder()
                 .guideSession(session)
@@ -117,57 +114,49 @@ public class GuideServiceImpl implements GuideService {
     // ==============================================================================
     // AI 서버 통신 메서드
     // ==============================================================================
-    private String requestLoRaAiModel(String questionText) {
-        // TODO; 실제 엔드포인트 주소 확인 필수 => api/v1 제거로 인해 하단 링크가 맞음
-        String aiServerUrl = "http://127.0.0.1:18020/lora/generate";
+// ==============================================================================
+    // AI 서버 통신 메서드 (수정 완료)
+    // ==============================================================================
+    private String[] requestLoRaAiModel(String situationText) {
+        String aiServerUrl = "http://127.0.0.1:18020/lora/guides";
 
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            // TODO: JSON 키값("question", "text" 등)에 맞게 수정 (검토)
+            // 1. 요청 바디의 키값을 "question" -> "situation"으로 변경
             Map<String, Object> body = new HashMap<>();
-            body.put("question", questionText);
+            body.put("situation", situationText);
 
             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
-            log.info("LoRA AI 서버에 가이드 텍스트 생성 요청 중... 최대 60초 대기");
-            ResponseEntity<String> response = restTemplate.postForEntity(
-                    aiServerUrl,
-                    requestEntity,
-                    String.class
-            );
-            log.info("LoRA AI 서버 응답 완료");
+            log.info("LoRA AI 서버에 가이드 텍스트 생성 요청 중...");
 
-            return response.getBody();
+            // 2. String 대신 Map.class로 받아서 JSON 자동 파싱
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    aiServerUrl, requestEntity, Map.class
+            );
+
+            Map<String, Object> responseBody = response.getBody();
+
+            // 3. 응답에서 script와 tips 분리해서 가져오기
+            String answer = (String) responseBody.get("script");
+
+            // tips는 배열(List)로 오므로, 줄바꿈(\n) 문자로 이어붙여서 하나의 문자열로 변환
+            List<String> tipsList = (List<String>) responseBody.get("tips");
+            String tips = "";
+            if (tipsList != null && !tipsList.isEmpty()) {
+                tips = String.join("\n", tipsList);
+            }
+
+            return new String[]{answer, tips};
 
         } catch (Exception e) {
             log.error("LoRA AI 서버 통신 오류: ", e);
-            // 통신 실패 시 서버가 터지지 않게 안전한 기본 안내 문구 반환
-            return "현재 AI 모델이 혼잡하여 답변을 생성할 수 없습니다. 잠시 후 다시 시도해주세요.";
+            return new String[]{
+                    "현재 AI 모델이 혼잡하여 답변을 생성할 수 없습니다.",
+                    "잠시 후 다시 시도해주세요."
+            };
         }
-    }
-
-    // AI 텍스트 파서: [대본]과 [도움말]을 분리
-    private String[] parseLoRaResponse(String rawText) {
-        String answer = "";
-        String tips = "";
-
-        if (rawText != null && rawText.contains("[대본]") && rawText.contains("[도움말]")) {
-            try {
-                int answerStart = rawText.indexOf("[대본]") + "[대본]".length();
-                int tipsStart = rawText.indexOf("[도움말]");
-
-                answer = rawText.substring(answerStart, tipsStart).trim();
-                tips = rawText.substring(tipsStart + "[도움말]".length()).trim();
-            } catch (Exception e) {
-                log.warn("가이드 텍스트 파싱 오류 발생. 원문을 대본에 넣습니다.");
-                answer = rawText;
-            }
-        } else {
-            // 헤더가 없을 경우 전체를 대본으로 처리
-            answer = rawText != null ? rawText : "";
-        }
-        return new String[]{answer, tips};
     }
 }
