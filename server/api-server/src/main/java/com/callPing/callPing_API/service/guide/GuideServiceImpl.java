@@ -114,9 +114,6 @@ public class GuideServiceImpl implements GuideService {
     // ==============================================================================
     // AI 서버 통신 메서드
     // ==============================================================================
-// ==============================================================================
-    // AI 서버 통신 메서드 (수정 완료)
-    // ==============================================================================
     private String[] requestLoRaAiModel(String situationText) {
         String aiServerUrl = "http://127.0.0.1:18020/lora/guides";
 
@@ -124,7 +121,7 @@ public class GuideServiceImpl implements GuideService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            // 1. 요청 바디의 키값을 "question" -> "situation"으로 변경
+            // 키값 변경
             Map<String, Object> body = new HashMap<>();
             body.put("situation", situationText);
 
@@ -132,17 +129,14 @@ public class GuideServiceImpl implements GuideService {
 
             log.info("LoRA AI 서버에 가이드 텍스트 생성 요청 중...");
 
-            // 2. String 대신 Map.class로 받아서 JSON 자동 파싱
             ResponseEntity<Map> response = restTemplate.postForEntity(
                     aiServerUrl, requestEntity, Map.class
             );
 
             Map<String, Object> responseBody = response.getBody();
 
-            // 3. 응답에서 script와 tips 분리해서 가져오기
             String answer = (String) responseBody.get("script");
 
-            // tips는 배열(List)로 오므로, 줄바꿈(\n) 문자로 이어붙여서 하나의 문자열로 변환
             List<String> tipsList = (List<String>) responseBody.get("tips");
             String tips = "";
             if (tipsList != null && !tipsList.isEmpty()) {

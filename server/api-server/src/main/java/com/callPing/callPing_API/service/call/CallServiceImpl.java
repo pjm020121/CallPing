@@ -83,8 +83,6 @@ public class CallServiceImpl implements CallService {
         );
     }
 
-    // TODO: GCS에 업로드된 음성파일을 STT에 전송하는 로직
-
     // =========================================================================
     // 3. 통화 분석/피드백 결과 조회 (임시)
     // =========================================================================
@@ -98,24 +96,47 @@ public class CallServiceImpl implements CallService {
         return null;
     }
 
+
     // =========================================================================
-    // 4. STT 변환 문장 수정 (임시)
+    // 4. STT 변환 문장 수정
     // =========================================================================
     @Override
     @Transactional
     public TranscriptSegmentDTO updateTranscript(Long recordId, Long transcriptId, TranscriptUpdateRequestDTO request) {
-        // TODO: CallTranscript 수정 로직 작성
-        return null;
+        // 1. 해당 문장이 DB에 존재하는지 확인
+        CallTranscript transcript = callTranscriptRepository.findById(transcriptId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 문장을 찾을 수 없습니다."));
+
+        // 2. 엔티티 텍스트 수정
+        transcript.updateText(request.text());
+
+        // 3. 수정된 결과를 DTO로 반환
+        return new TranscriptSegmentDTO(
+                transcript.getId(),
+                transcript.getSpeaker(),
+                transcript.getTimestampOffset(),
+                transcript.getText()
+        );
     }
 
     // =========================================================================
-    // 5. STT 문장 삭제 (임시)
+    // 5. STT 문장 삭제
     // =========================================================================
     @Override
     @Transactional
     public TranscriptDeleteResponseDTO deleteTranscript(Long recordId, Long transcriptId) {
-        // TODO: CallTranscript 삭제 로직 작성
-        return null;
+        // 1. 해당 문장 조회
+        CallTranscript transcript = callTranscriptRepository.findById(transcriptId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 문장을 찾을 수 없습니다."));
+
+        // 2. 삭제 상태로 변경 (Soft Delete)
+        transcript.markAsDeleted();
+
+        // 3. 삭제 완료 응답 반환
+        return new TranscriptDeleteResponseDTO(
+                transcriptId,
+                true
+        );
     }
 
     // =========================================================================
