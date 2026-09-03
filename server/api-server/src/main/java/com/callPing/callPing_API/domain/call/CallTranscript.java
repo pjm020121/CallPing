@@ -26,17 +26,16 @@ public class CallTranscript {
     // 소프트 삭제
     private boolean isDeleted = false;
 
-    // 수정을 위한 메서드
+
+    // 수정 메서드
     public void updateText(String text) {
-        this.text = text;
+        if (text != null && !text.isBlank()) {
+            this.text = text;
+        }
     }
 
-    // 삭제를 위한 메서드
+    // 삭제 상태 변경하는 메서드
     public void markAsDeleted() {
         this.isDeleted = true;
-    }
-
-    public void setCallRecord(CallRecord callRecord) {
-        this.callRecord = callRecord;
     }
 }
