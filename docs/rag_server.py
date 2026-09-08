@@ -37,7 +37,7 @@ LEVEL_THRESHOLDS = {
 
 MAX_LEN = 500
 TOP_K = 3
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 # EC2(리눅스, GPU 없음)에서는 반드시 cpu 로 설정하세요.
 # NVIDIA GPU가 붙은 인스턴스(g4dn 등)라면 cuda 로 변경 가능합니다.
