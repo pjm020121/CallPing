@@ -35,14 +35,17 @@ public class CallRecord {
     private OffsetDateTime uploadTime;
 
     // 1:N 관계
-    @OneToMany(mappedBy = "callRecord", cascade = CascadeType.ALL)
+    @Builder.Default
+    @OneToMany(mappedBy = "callRecord", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CallTranscript> transcripts = new ArrayList<>();
 
     // 연관관계 편의 메서드 (문장을 리스트에 추가)
     public void addTranscript(CallTranscript transcript) {
+        if (this.transcripts == null) {
+            this.transcripts = new ArrayList<>(); // null 방어 코드
+        }
         this.transcripts.add(transcript);
-        // CallTranscript 엔티티 쪽에도 setCallRecord() 또는 생성자로
-        // 맵핑해주는 로직이 필요
+        transcript.setCallRecord(this);
     }
 
     // AI 분석 완료 후 결과 업데이트
