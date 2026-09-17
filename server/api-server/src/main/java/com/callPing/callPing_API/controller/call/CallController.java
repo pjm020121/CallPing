@@ -53,7 +53,7 @@ public class CallController {
         return ResponseEntity.ok(callService.getCallAnalysis(recordId));
     }
 
-    // 4. STT 변환 문장 텍스트 수정 TODO: 로직아직!!
+    // 4. STT 변환 문장 텍스트 수정
     @ApiCode(code = "TRANSCRIPT_UPDATED", message = "변환된 문장이 수정되었습니다.")
     @PatchMapping("/{recordId}/transcripts/{transcriptId}")
     public ResponseEntity<TranscriptSegmentDTO> updateTranscript(
@@ -65,7 +65,7 @@ public class CallController {
         return ResponseEntity.ok(callService.updateTranscript(recordId, transcriptId, request));
     }
 
-    //5. STT 변환 문장 삭제 TODO: 로직아직!!!
+    //5. STT 변환 문장 삭제
     @ApiCode(code = "TRANSCRIPT_DELETED", message = "변환된 문장이 삭제되었습니다.")
     @DeleteMapping("/{recordId}/transcripts/{transcriptId}")
     public ResponseEntity<TranscriptDeleteResponseDTO> deleteTranscript(
