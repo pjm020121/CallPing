@@ -38,7 +38,6 @@ public class CallRecord {
     @Builder.Default
     @OneToMany(mappedBy = "callRecord", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CallTranscript> transcripts = new ArrayList<>();
-
     // 연관관계 편의 메서드 (문장을 리스트에 추가)
     public void addTranscript(CallTranscript transcript) {
         if (this.transcripts == null) {
@@ -57,6 +56,19 @@ public class CallRecord {
 
     // 상태만 단독으로 변경 (실패 등)
     public void updateStatus(String status) {
+        this.analysisStatus = status;
+    }
+
+    // 기존 필드들 아래에 추가
+    @Column(length = 200)
+    private String keywords;
+
+    // AI 결과 업데이트 메서드 수정
+    public void updateAiAnalysis(String expression, String feedback, String summary, String keywords, String status) {
+        this.expression = expression;
+        this.feedback = feedback;
+        this.summary = summary;
+        this.keywords = keywords;
         this.analysisStatus = status;
     }
 }
