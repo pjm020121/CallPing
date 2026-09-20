@@ -24,11 +24,12 @@ public class CallTranscript {
     private String text;
 
     // 소프트 삭제
+    @Column(nullable = false)
     private boolean isDeleted = false;
 
     // 수정을 위한 메서드
-    public void updateText(String text) {
-        this.text = text;
+    public void updateText(String newText) {
+        this.text = newText;
     }
 
     // 삭제를 위한 메서드

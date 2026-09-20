@@ -5,9 +5,12 @@ import com.callPing.callPing_API.dto.response.call.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 public interface CallService {
     // 1. 녹음 파일 목록 조회
-    List<CallRecordListResponseDTO> getCallRecords(Long userId);
+     Page<CallRecordListResponseDTO> getCallRecords(Long userId, Pageable pageable);
 
     // 2. 녹음 파일 업로드 및 분석 (STT -> AI 연동)
     CallRecordResponseDTO processCallRecord(Long userId, String callerName, MultipartFile file);
