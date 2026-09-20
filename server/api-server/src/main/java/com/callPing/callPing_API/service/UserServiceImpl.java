@@ -171,43 +171,44 @@ public class UserServiceImpl implements UserService {
         user.changePassword(encodedPassword);
     }
 
-    // =================================================================================
+// =================================================================================
     // #3. 세션 도메인 (로그인/로그아웃)
     // =================================================================================
 
     @Override
-    @Transactional(noRollbackFor = { ApiException.class }) // 중복된 ApiException 제거
+    @Transactional(noRollbackFor = ApiException.class) // 예외가 터져도 로그인 실패 카운트 저장을 보장
     public LoginResponseDTO login(LoginRequestDTO requestDTO) {
         String loginId = requestDTO.loginId();
 
-        // 1. 유저 조회 (가장 먼저 해야 함)
+        // 1. 유저 조회 (가장 먼저 해야 함) - 여기서 실패 시 401 반환
         User user = userRepository.findByLoginId(loginId)
-                .orElseThrow(() -> new ApiException(401, "AUTH_ERR_INVALID_CREDENTIALS", "아이디 또는 비밀번호가 잘못되었습니다."));
+                .orElseThrow(() -> new ApiException(401, "AUTH_ERR_INVALID_CREDENTIALS", "존재하지 않는 아이디입니다."));
 
-        // 2. 이미 계정이 잠겨 있는지 DB 기준으로 확인
-        if (user.getFailedLoginCount() >= MAX_FAIL_COUNT || user.getIsLocked()) {
-            throw new ApiException(403, "AUTH_ERR_ACCOUNT_LOCKED", "비밀번호 5회 오류로 계정이 잠겼습니다. 잠시 후 다시 시도해주세요.");
+        // 2. 이미 계정이 잠겨 있는지 DB 기준으로 확인 (403 반환)
+        if (user.getIsLocked()) {
+            throw new ApiException(403, "AUTH_ERR_ACCOUNT_LOCKED", "비밀번호 5회 오류로 계정이 잠겼습니다. 잠금 해제를 진행해 주세요.");
         }
 
         // 3. 비밀번호 검증
         if (!passwordEncoder.matches(requestDTO.password(), user.getPassword())) {
 
+            // 비밀번호 틀림 -> 카운트 증가 및 즉시 DB 저장
             user.increaseFailedLoginCount();
+            userRepository.save(user);
 
-            userRepository.saveAndFlush(user);
-
-            // 잠겼을 때와 단순 틀렸을 때의 응답 분리
+            // 방금 5회 도달해서 잠긴 경우 (403 반환)
             if (user.getIsLocked()) {
-                throw new ApiException(403, "AUTH_ERR_ACCOUNT_LOCKED", "비밀번호 5회 오류로 계정이 잠겼습니다. 잠시 후 다시 시도해주세요.");
+                throw new ApiException(403, "AUTH_ERR_ACCOUNT_LOCKED", "비밀번호 5회 오류로 계정이 잠겼습니다. 잠금 해제를 진행해 주세요.");
             } else {
-                throw new ApiException(401, "AUTH_ERR_INVALID_CREDENTIALS", "아이디 또는 비밀번호가 잘못되었습니다. (실패 횟수: " + user.getFailedLoginCount() + "/" + MAX_FAIL_COUNT + ")");
+                // 5회 미만인 경우 (401 반환 및 남은 횟수 표시)
+                throw new ApiException(401, "AUTH_ERR_INVALID_CREDENTIALS",
+                        "비밀번호가 잘못되었습니다. (실패 횟수: " + user.getFailedLoginCount() + "/5)");
             }
         }
 
         // 4. 로그인 성공 시 실패 카운트 및 잠금 상태 초기화
         if (user.getFailedLoginCount() > 0) {
             user.unlockAccount();
-            userRepository.saveAndFlush(user);
         }
 
         // 5. Access Token 및 Refresh Token 발급

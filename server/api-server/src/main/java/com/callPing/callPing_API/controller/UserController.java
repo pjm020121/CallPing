@@ -271,4 +271,16 @@ public class UserController {
         ));
     }
 
+    // =========================================================================
+    // 6. FCM 푸시 토큰 등록/갱신
+    // =========================================================================
+    @PatchMapping("/me/fcm-token")
+    public ResponseEntity<Void> updateFcmToken(
+            @Valid @RequestBody FcmTokenUpdateRequestDTO requestDTO,
+            @AuthenticationPrincipal UserPrincipal userDetails
+    ) {
+        userService.updateFcmToken(userDetails.getUserId(), requestDTO);
+
+        return ResponseEntity.ok().build(); // 성공 시 200 OK 반환
+    }
 }
