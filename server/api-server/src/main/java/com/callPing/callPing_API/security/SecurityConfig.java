@@ -47,6 +47,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/users/me/**").authenticated()
                         .requestMatchers("/chats/**").authenticated()
+                        .requestMatchers("/guides/**").authenticated()
                         .anyRequest().permitAll()
                 )
                 .exceptionHandling(ex -> ex

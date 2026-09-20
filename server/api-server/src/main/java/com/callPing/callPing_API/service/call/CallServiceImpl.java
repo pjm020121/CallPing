@@ -1,19 +1,26 @@
 package com.callPing.callPing_API.service.call;
 
+import com.callPing.callPing_API.domain.Todo;
 import com.callPing.callPing_API.domain.call.CallRecord;
 import com.callPing.callPing_API.domain.call.CallTranscript;
 import com.callPing.callPing_API.dto.request.call.TranscriptUpdateRequestDTO;
 import com.callPing.callPing_API.dto.response.call.*;
+import com.callPing.callPing_API.repository.TodoRepository;
 import com.callPing.callPing_API.repository.call.CallRecordRepository;
 import com.callPing.callPing_API.repository.call.CallTranscriptRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,34 +31,33 @@ public class CallServiceImpl implements CallService {
 
     private final CallRecordRepository callRecordRepository;
     private final CallTranscriptRepository callTranscriptRepository;
+    private final TodoRepository todoRepository;
     private final GoogleSttService googleSttService;
     private final AiFeedbackService aiFeedbackService;
     private final GcsUploadService gcsUploadService;
+    private final ObjectMapper objectMapper;
 
     // =========================================================================
-    // 녹음 파일 목록 조회
+    // 1. 녹음 파일 목록 페이징 조회
     // =========================================================================
     @Override
     @Transactional(readOnly = true)
-    public List<CallRecordListResponseDTO> getCallRecords(Long userId) {
-        return callRecordRepository.findAllByUserIdOrderByUploadTimeDesc(userId).stream()
+    public Page<CallRecordListResponseDTO> getCallRecords(Long userId, Pageable pageable) {
+        return callRecordRepository.findAllByUserIdOrderByUploadTimeDesc(userId, pageable)
                 .map(record -> new CallRecordListResponseDTO(
                         record.getId(),
                         record.getCallerName(),
                         record.getUploadTime(),
                         record.getAnalysisStatus()
-                ))
-                .toList();
+                ));
     }
 
     // =========================================================================
-    // 녹음 파일 업로드 및 분석 요청
+    // 2. 녹음 파일 업로드 및 분석 요청
     // =========================================================================
     @Override
     @Transactional
     public CallRecordResponseDTO processCallRecord(Long userId, String callerName, MultipartFile file) {
-
-        // DB에 '분석 중'으로 레코드 생성
         CallRecord callRecord = CallRecord.builder()
                 .userId(userId)
                 .callerName(callerName)
@@ -62,18 +68,13 @@ public class CallServiceImpl implements CallService {
         callRecordRepository.save(callRecord);
 
         try {
-            // GCS에 파일 업로드 후 gs:// URI 반환
             String gcsUri = gcsUploadService.uploadAudioFile(file);
-
-            // 비동기로 STT 분석 및 AI 분석 백그라운드 실행
             processSttAndAiAsync(callRecord.getId(), gcsUri);
-
         } catch (Exception e) {
             log.error("GCS 업로드 실패", e);
             throw new RuntimeException("녹음 파일 업로드에 실패했습니다.");
         }
 
-        // 클라이언트에는 즉시 업로드 성공 응답 반환
         return new CallRecordResponseDTO(
                 callRecord.getId(),
                 callRecord.getCallerName(),
@@ -92,8 +93,20 @@ public class CallServiceImpl implements CallService {
         CallRecord callRecord = callRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 녹음 기록을 찾을 수 없습니다."));
 
-        // TODO: CallAnalysisResponseDTO 스펙에 맞추어 변환 로직 보완
-        return null;
+        List<TranscriptSegmentDTO> segments = callRecord.getTranscripts().stream()
+                .filter(t -> !t.isDeleted())
+                .map(t -> new TranscriptSegmentDTO(t.getId(), t.getSpeaker(), t.getTimestampOffset(), t.getText()))
+                .collect(Collectors.toList());
+
+        return new CallAnalysisResponseDTO(
+                callRecord.getId(),
+                segments,               // 1. 기존 DTO에 있던 transcript 리스트
+                callRecord.getSummary(),    // 2. summary
+                "화자 분석 완료",          // 3. speakerResult (현재 AI 모델에 없으므로 임시 문자열)
+                callRecord.getExpression(), // 4. expression
+                callRecord.getFeedback(),   // 5. feedback
+                callRecord.getUploadTime()  // 6. createdAt (업로드 시간으로 대체)
+        );
     }
 
 
@@ -107,10 +120,10 @@ public class CallServiceImpl implements CallService {
         CallTranscript transcript = callTranscriptRepository.findById(transcriptId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 문장을 찾을 수 없습니다."));
 
-        // 2. 엔티티 텍스트 수정
+        // 2. 엔티티 텍스트 수정 (TranscriptUpdateRequestDTO가 record 타입이면 request.text(), 일반 클래스면 request.getText() 사용)
         transcript.updateText(request.text());
 
-        // 3. 수정된 결과를 DTO로 반환
+        // 3. 수정된 결과를 DTO로 조립하여 반환
         return new TranscriptSegmentDTO(
                 transcript.getId(),
                 transcript.getSpeaker(),
@@ -129,10 +142,10 @@ public class CallServiceImpl implements CallService {
         CallTranscript transcript = callTranscriptRepository.findById(transcriptId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 문장을 찾을 수 없습니다."));
 
-        // 2. 삭제 상태로 변경 (Soft Delete)
+        // 2. 삭제 상태로 변경 (실제 DB에서 지우지 않고 숨김 처리)
         transcript.markAsDeleted();
 
-        // 3. 삭제 완료 응답 반환
+        // 3. 삭제 성공 응답 반환
         return new TranscriptDeleteResponseDTO(
                 transcriptId,
                 true
@@ -151,57 +164,63 @@ public class CallServiceImpl implements CallService {
         try {
             log.info("비동기 분석 시작 - recordId: {}", recordId);
 
-            // Google STT V2 호출 및 단어를 문장으로 병합
             List<CallTranscript> transcripts = googleSttService.transcribeAudio(gcsUri, callRecord);
-
             transcripts.forEach(callRecord::addTranscript);
             callTranscriptRepository.saveAll(transcripts);
 
-            // AI 서버용 문장 리스트 추출
             List<String> sentences = transcripts.stream()
                     .map(CallTranscript::getText)
                     .collect(Collectors.toList());
 
-            // AI 서버에 전송 (최대 60초 대기)
+            // AI 서버에 전송
             String rawAiResponse = aiFeedbackService.getAiFeedback(sentences);
 
-            // AI 텍스트 결과 파싱
-            String[] parsedResults = parseAiResponse(rawAiResponse);
-            String expression = parsedResults[0];
-            String feedback = parsedResults[1];
+            // AI 텍스트 JSON 파싱 및 TODO 추출 로직 실행
+            parseAndSaveAiResponse(rawAiResponse, callRecord);
 
-            // DB 상태 업데이트
-            callRecord.updateAiAnalysis(expression, feedback, "완료");
-            log.info("비동기 분석 완료 - recordId: {}", recordId);
+            log.info("비동기 분석 및 TODO 추출 완료 - recordId: {}", recordId);
 
         } catch (Exception e) {
             log.error("비동기 분석 중 에러 발생 - recordId: {}", recordId, e);
-            callRecord.updateStatus("실패");
+            callRecord.updateAiAnalysis(null, null, null, null, "실패");
         }
     }
 
+    // 새로운 AI 응답 파서
+    private void parseAndSaveAiResponse(String rawAiResponse, CallRecord callRecord) {
+        try {
+            JsonNode rootNode = objectMapper.readTree(rawAiResponse);
 
-    private String[] parseAiResponse(String rawText) {
-        String expression = "";
-        String feedback = "";
+            JsonNode feedbackNode = rootNode.path("llm_feedback");
+            String expression = feedbackNode.path("tone_analysis").asText("");
+            String feedback = feedbackNode.path("speech_feedback").asText("")
+                    + " / 개선점: " + feedbackNode.path("improvement_points").asText("");
+            String summary = rootNode.path("todo_summary").asText("요약 정보가 없습니다.");
+            String keywords = "미제공";
 
-        if (rawText.contains("[표현 분석]") && rawText.contains("[개선 피드백]")) {
-            try {
-                int expStart = rawText.indexOf("[표현 분석]") + "[표현 분석]".length();
-                int fbStart = rawText.indexOf("[개선 피드백]");
+            callRecord.updateAiAnalysis(expression, feedback, summary, keywords, "완료");
 
-                expression = rawText.substring(expStart, fbStart).trim();
-                feedback = rawText.substring(fbStart + "[개선 피드백]".length()).trim();
-
-            } catch (Exception e) {
-                log.warn("AI 텍스트 파싱 오류 발생. 원문 전체를 피드백으로 이동합니다.");
-                feedback = rawText;
+            JsonNode todosNode = rootNode.path("todos");
+            if (todosNode.isArray()) {
+                List<Todo> newTodos = new ArrayList<>();
+                for (JsonNode todoItem : todosNode) {
+                    Todo todo = Todo.builder()
+                            .userId(callRecord.getUserId())
+                            .callRecord(callRecord)
+                            .taskType(todoItem.path("task_type").asText("MANUAL"))
+                            .description(todoItem.path("description").asText("내용 없음"))
+                            .priority(todoItem.path("priority").asText("MEDIUM"))
+                            .status(todoItem.path("status").asText("PENDING"))
+                            .createdAt(OffsetDateTime.now())
+                            .build();
+                    newTodos.add(todo);
+                }
+                todoRepository.saveAll(newTodos);
             }
-        } else {
-            log.info("AI 응답에 섹션 헤더가 없어 전체 텍스트를 피드백으로 폴백합니다.");
-            feedback = rawText;
-        }
 
-        return new String[]{expression, feedback};
+        } catch (Exception e) {
+            log.warn("AI 응답 JSON 파싱 실패. 일반 텍스트로 간주하여 저장합니다. 원문: {}", rawAiResponse);
+            callRecord.updateAiAnalysis("", rawAiResponse, "파싱 실패", "", "완료");
+        }
     }
 }
