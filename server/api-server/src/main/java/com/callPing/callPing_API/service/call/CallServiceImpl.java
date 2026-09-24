@@ -220,6 +220,16 @@ public class CallServiceImpl implements CallService {
             // AI 서버에 전송
             String rawAiResponse = aiFeedbackService.getAiFeedback(sentences);
 
+            // AI 서버에 전송
+            String rawAiResponse = aiFeedbackService.getAiFeedback(sentences);
+            
+            // 디버깅용
+            log.info("LoRA AI 실제 응답 원문: {}", rawAiResponse); 
+            log.info("STT가 추출한 문장 개수: {}", sentences.size());
+
+            // AI 텍스트 JSON 파싱 및 TODO 추출 로직 실행
+            parseAndSaveAiResponse(rawAiResponse, callRecord);
+
             // AI 텍스트 JSON 파싱 및 TODO 추출 로직 실행
             parseAndSaveAiResponse(rawAiResponse, callRecord);
 
