@@ -268,4 +268,15 @@ public class CallServiceImpl implements CallService {
             callRecord.updateAiAnalysis("", rawAiResponse, "파싱 실패", "", "완료");
         }
     }
+
+    // =========================================================================
+    // 통화 분석 진행 상태 조회 (프론트엔드 폴링용)
+    // =========================================================================
+    @Override
+    @Transactional(readOnly = true)
+    public String getCallStatus(Long recordId) {
+        return callRecordRepository.findById(recordId)
+                .map(CallRecord::getAnalysisStatus)
+                .orElseThrow(() -> new IllegalArgumentException("레코드 없음"));
+    }
 }
