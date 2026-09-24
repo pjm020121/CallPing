@@ -23,4 +23,11 @@ public interface CallService {
 
     // 5. STT 문장 삭제
     TranscriptDeleteResponseDTO deleteTranscript(Long recordId, Long transcriptId);
+
+    CallDetailsResponseDTO getCallDetails(Long recordId);
+
+    CallTodoResponseDTO getCallTodos(Long recordId);
+
+    String getCallStatus(Long recordId);
+
 }
