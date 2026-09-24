@@ -24,7 +24,6 @@ public class GoogleSttServiceImpl implements GoogleSttService {
                     .build();
 
             RecognitionConfig config = RecognitionConfig.newBuilder()
-                    .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16) // TODO: 실제 파일 포맷에 맞게 수정
                     .setLanguageCode("ko-KR")
                     .setEnableAutomaticPunctuation(true) // 구두점 자동 생성
                     .setEnableWordTimeOffsets(true)      // 타임스탬프 활성화
