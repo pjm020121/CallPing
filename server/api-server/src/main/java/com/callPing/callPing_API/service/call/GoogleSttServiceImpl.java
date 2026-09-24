@@ -17,7 +17,7 @@ public class GoogleSttServiceImpl implements GoogleSttService {
 
         try (SpeechClient speechClient = SpeechClient.create()) {
 
-            // 1. 중간 보고에 맞춘 STT 환경 설정
+            // 1. STT 환경 설정
             SpeakerDiarizationConfig diarizationConfig = SpeakerDiarizationConfig.newBuilder()
                     .setEnableSpeakerDiarization(true)
                     // 화자 수는 지정하지 않음
@@ -25,6 +25,7 @@ public class GoogleSttServiceImpl implements GoogleSttService {
 
             RecognitionConfig config = RecognitionConfig.newBuilder()
                     .setLanguageCode("ko-KR")
+                    .setModel("telephony")
                     .setEnableAutomaticPunctuation(true) // 구두점 자동 생성
                     .setEnableWordTimeOffsets(true)      // 타임스탬프 활성화
                     .setDiarizationConfig(diarizationConfig)
