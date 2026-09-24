@@ -27,7 +27,7 @@ public interface CallService {
     CallDetailsResponseDTO getCallDetails(Long recordId);
 
     CallTodoResponseDTO getCallTodos(Long recordId);
-    
+
     String getCallStatus(Long recordId);
 
 }

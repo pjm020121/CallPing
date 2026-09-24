@@ -99,7 +99,7 @@ public class CallController {
         return ResponseEntity.ok(callService.deleteTranscript(recordId, transcriptId));
     }
 
-        // 8. 분석 상태 조회
+    // 8. 분석 상태 조회
     @GetMapping("/{recordId}/status")
     public ResponseEntity<java.util.Map<String, String>> getCallStatus(
             @PathVariable Long recordId
