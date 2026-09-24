@@ -85,7 +85,7 @@ public class CallServiceImpl implements CallService {
     }
 
     // =========================================================================
-    // 3. 통화 분석/피드백 결과 조회 (임시)
+    // 3. 통화 분석/피드백 결과 조회
     // =========================================================================
     @Override
     @Transactional(readOnly = true)
@@ -109,6 +109,51 @@ public class CallServiceImpl implements CallService {
         );
     }
 
+        // =========================================================================
+    // 3-1. 개별 통화 상세 조회 (STT 대본)
+    // =========================================================================
+    @Override
+    @Transactional(readOnly = true)
+    public CallDetailsResponseDTO getCallDetails(Long recordId) {
+        CallRecord record = callRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("레코드 없음"));
+
+        // 삭제 안 된 대본을 DTO로 변환
+        List<TranscriptSegmentDTO> segments = record.getTranscripts().stream()
+                .filter(t -> !t.isDeleted())
+                .map(t -> new TranscriptSegmentDTO(t.getId(), t.getSpeaker(), t.getTimestampOffset(), t.getText()))
+                .collect(Collectors.toList());
+
+        return new CallDetailsResponseDTO(
+                record.getId(),
+                record.getCallerName(),
+                record.getUploadTime(),
+                record.getAnalysisStatus(),
+                segments
+        );
+    }
+
+    // =========================================================================
+    // 3-2. 분석 기반 TODO 추출
+    // =========================================================================
+    @Override
+    @Transactional(readOnly = true)
+    public CallTodoResponseDTO getCallTodos(Long recordId) {
+        CallRecord record = callRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("레코드 없음"));
+
+        // 이 통화 기록에서 파생된 TODO 목록 꺼내오기
+        List<Todo> todos = todoRepository.findByCallRecordId(recordId);
+
+        // TODO들을 DTO로 변환
+        List<TodoDTO> todoDTOs = todos.stream()
+                .map(t -> new TodoDTO(t.getId(), t.getTaskType(), t.getDescription(), t.getPriority(), t.getStatus()))
+                .collect(Collectors.toList());
+
+        String summary = "총 " + todos.size() + "건의 후속 조치가 필요합니다.";
+
+        return new CallTodoResponseDTO(record.getId(), summary, todoDTOs);
+    }
 
     // =========================================================================
     // 4. STT 변환 문장 수정
