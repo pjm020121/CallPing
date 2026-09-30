@@ -1,5 +1,11 @@
 """
 RAG 챗봇 API 서버 (FastAPI)
+
+실행
+- uvicorn rag_server:app --host 0.0.0.0 --port 8000
+
+(선택) 외부 접속이 필요할 때 ngrok으로 공개
+- ngrok http --url=YOUR_URL.ngrok-free.dev 8000
 """
 
 import os
