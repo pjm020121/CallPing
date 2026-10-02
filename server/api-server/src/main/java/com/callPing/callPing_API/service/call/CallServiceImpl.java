@@ -3,6 +3,7 @@ package com.callPing.callPing_API.service.call;
 import com.callPing.callPing_API.domain.Todo;
 import com.callPing.callPing_API.domain.call.CallRecord;
 import com.callPing.callPing_API.domain.call.CallTranscript;
+import com.callPing.callPing_API.dto.request.call.CallRecordUpdateRequestDTO;
 import com.callPing.callPing_API.dto.request.call.TranscriptUpdateRequestDTO;
 import com.callPing.callPing_API.dto.response.call.*;
 import com.callPing.callPing_API.repository.TodoRepository;
@@ -69,7 +70,7 @@ public class CallServiceImpl implements CallService {
 
         try {
             String gcsUri = gcsUploadService.uploadAudioFile(file);
-            processSttAndAiAsync(callRecord.getId(), gcsUri);
+            processSttAsync(callRecord.getId(), gcsUri);
         } catch (Exception e) {
             log.error("GCS 업로드 실패", e);
             throw new RuntimeException("녹음 파일 업로드에 실패했습니다.");
@@ -198,46 +199,59 @@ public class CallServiceImpl implements CallService {
     }
 
     // =========================================================================
-    // 비동기 STT & AI 피드백 파이프라인
+    // 비동기 STT & AI 피드백 파이프라인 ==> 2단계로 분리
+    // =========================================================================
+    // =========================================================================
+    // [1단계] 파일 업로드 직후: 비동기 STT 변환 수행
     // =========================================================================
     @Async
     @Transactional
-    public void processSttAndAiAsync(Long recordId, String gcsUri) {
+    public void processSttAsync(Long recordId, String gcsUri) { // 메서드명 변경 및 AI호출 부분 삭제
         CallRecord callRecord = callRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("레코드 없음"));
-
         try {
-            log.info("비동기 분석 시작 - recordId: {}", recordId);
-
+            log.info("1단계 STT 분석 시작 - recordId: {}", recordId);
             List<CallTranscript> transcripts = googleSttService.transcribeAudio(gcsUri, callRecord);
             transcripts.forEach(callRecord::addTranscript);
             callTranscriptRepository.saveAll(transcripts);
 
-            List<String> sentences = transcripts.stream()
-                    .map(CallTranscript::getText)
+            // STT 완료 후 상태를 변경하여 프론트가 대본을 불러오도록 유도
+            callRecord.updateAiAnalysis(null, null, null, null, "대본 수정 대기");
+            log.info("1단계 STT 분석 완료 (수정 대기 상태 전환) - recordId: {}", recordId);
+        } catch (Exception e) {
+            log.error("STT 변환 중 에러 발생", e);
+            callRecord.updateAiAnalysis(null, null, null, null, "실패");
+        }
+    }
+
+    // =========================================================================
+    // [2단계] 프론트엔드 호출 후: 교정된 대본으로 LoRA AI 분석 수행
+    // =========================================================================
+    @Override
+    @Async
+    @Transactional
+    public void startAiAnalysisAsync(Long recordId) {
+        CallRecord callRecord = callRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("레코드 없음"));
+
+        try {
+            log.info("2단계 LoRA AI 분석 시작 - recordId: {}", recordId);
+            callRecord.updateAiAnalysis(null, null, null, null, "AI 분석중"); // 로딩바 진행용
+
+            // 삭제 처리되지 않은 대본만 모아서 AI 서버로 전송
+            List<CallTranscript> activeTranscripts = callRecord.getTranscripts().stream()
+                    .filter(t -> !t.isDeleted())
                     .collect(Collectors.toList());
 
-            // AI 서버에 전송
-            String rawAiResponse = aiFeedbackService.getAiFeedback(sentences);
+            String rawAiResponse = aiFeedbackService.getAiFeedback(activeTranscripts);
 
-            // AI 서버에 전송
-            String rawAiResponse = aiFeedbackService.getAiFeedback(sentences);
-            
-            // 디버깅용
-            log.info("LoRA AI 실제 응답 원문: {}", rawAiResponse); 
-            log.info("STT가 추출한 문장 개수: {}", sentences.size());
-
-            // AI 텍스트 JSON 파싱 및 TODO 추출 로직 실행
+            // 파싱 및 저장
             parseAndSaveAiResponse(rawAiResponse, callRecord);
-
-            // AI 텍스트 JSON 파싱 및 TODO 추출 로직 실행
-            parseAndSaveAiResponse(rawAiResponse, callRecord);
-
-            log.info("비동기 분석 및 TODO 추출 완료 - recordId: {}", recordId);
+            log.info("2단계 LoRA AI 분석 완료 - recordId: {}", recordId);
 
         } catch (Exception e) {
-            log.error("비동기 분석 중 에러 발생 - recordId: {}", recordId, e);
-            callRecord.updateAiAnalysis(null, null, null, null, "실패");
+            log.error("LoRA AI 분석 중 에러 발생", e);
+            callRecord.updateAiAnalysis(null, null, null, null, "AI 분석 실패");
         }
     }
 
@@ -288,5 +302,29 @@ public class CallServiceImpl implements CallService {
         return callRecordRepository.findById(recordId)
                 .map(CallRecord::getAnalysisStatus)
                 .orElseThrow(() -> new IllegalArgumentException("레코드 없음"));
+    }
+
+    // =========================================================================
+    // 9. 통화 기록 정보 수정 (파일명, 관계, 요약)
+    // =========================================================================
+    @Override
+    @Transactional
+    public void updateCallRecordInfo(Long recordId, CallRecordUpdateRequestDTO request) {
+        CallRecord callRecord = callRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 녹음 기록을 찾을 수 없습니다."));
+
+        callRecord.updateFileInfo(request.fileName(), request.callerName(), request.summary());
+    }
+
+    // =========================================================================
+    // 10. 통화 기록 완전 삭제
+    // =========================================================================
+    @Override
+    @Transactional
+    public void deleteCallRecord(Long recordId) {
+        CallRecord callRecord = callRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 녹음 기록을 찾을 수 없습니다."));
+
+        callRecordRepository.delete(callRecord);
     }
 }

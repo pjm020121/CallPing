@@ -71,4 +71,13 @@ public class CallRecord {
         this.keywords = keywords;
         this.analysisStatus = status;
     }
+
+    // ==========================================
+    // 통화 기록 정보 수동 업데이트 (파일명, 관계, 요약)
+    // ==========================================
+    public void updateFileInfo(String fileName, String callerName, String summary) {
+        if (fileName != null && !fileName.isBlank()) this.fileName = fileName;
+        if (callerName != null && !callerName.isBlank()) this.callerName = callerName;
+        if (summary != null && !summary.isBlank()) this.summary = summary;
+    }
 }

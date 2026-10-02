@@ -1,5 +1,6 @@
 package com.callPing.callPing_API.service.call;
 
+import com.callPing.callPing_API.dto.request.call.CallRecordUpdateRequestDTO;
 import com.callPing.callPing_API.dto.request.call.TranscriptUpdateRequestDTO;
 import com.callPing.callPing_API.dto.response.call.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,4 +31,9 @@ public interface CallService {
 
     String getCallStatus(Long recordId);
 
+    void updateCallRecordInfo(Long recordId, CallRecordUpdateRequestDTO request);
+
+    void deleteCallRecord(Long recordId);
+
+    void startAiAnalysisAsync(Long recordId);
 }

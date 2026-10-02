@@ -1,5 +1,6 @@
 package com.callPing.callPing_API.controller.call;
 
+import com.callPing.callPing_API.dto.request.call.CallRecordUpdateRequestDTO;
 import com.callPing.callPing_API.dto.request.call.TranscriptUpdateRequestDTO;
 import com.callPing.callPing_API.dto.response.call.*;
 import com.callPing.callPing_API.dto.common.ApiCode;
@@ -107,5 +108,39 @@ public class CallController {
         String status = callService.getCallStatus(recordId);
         // Map으로 감싸 반환 {"status": "완료"}
         return ResponseEntity.ok(java.util.Map.of("status", status));
+    }
+
+    // 9. 통화 기록 정보 수정 (파일명, 관계, 요약)
+    @ApiCode(code = "CALL_RECORD_UPDATED", message = "통화 기록 정보가 수정되었습니다.")
+    @PatchMapping("/{recordId}")
+    public ResponseEntity<java.util.Map<String, Object>> updateCallRecordInfo(
+            @PathVariable Long recordId,
+            @RequestBody CallRecordUpdateRequestDTO request,
+            @AuthenticationPrincipal UserPrincipal userDetails
+    ) {
+        callService.updateCallRecordInfo(recordId, request);
+        return ResponseEntity.ok(java.util.Map.of("recordId", recordId, "success", true));
+    }
+
+    // 10. 통화 기록 및 연관 데이터 삭제
+    @ApiCode(code = "CALL_RECORD_DELETED", message = "통화 기록이 삭제되었습니다.")
+    @DeleteMapping("/{recordId}")
+    public ResponseEntity<java.util.Map<String, Object>> deleteCallRecord(
+            @PathVariable Long recordId,
+            @AuthenticationPrincipal UserPrincipal userDetails
+    ) {
+        callService.deleteCallRecord(recordId);
+        return ResponseEntity.ok(java.util.Map.of("recordId", recordId, "success", true));
+    }
+
+    // 11. 2단계 파이프라인: 수정한 대본으로 LoRA AI 분석 요청 (신규 추가)
+    @ApiCode(code = "CALL_AI_ANALYSIS_STARTED", message = "AI 피드백 및 요약 분석이 시작되었습니다.")
+    @PostMapping("/{recordId}/analyze")
+    public ResponseEntity<java.util.Map<String, Object>> startAiAnalysis(
+            @PathVariable Long recordId,
+            @AuthenticationPrincipal UserPrincipal userDetails
+    ) {
+        callService.startAiAnalysisAsync(recordId); // 백그라운드 AI 분석 트리거
+        return ResponseEntity.ok(java.util.Map.of("recordId", recordId, "status", "AI 분석중"));
     }
 }
