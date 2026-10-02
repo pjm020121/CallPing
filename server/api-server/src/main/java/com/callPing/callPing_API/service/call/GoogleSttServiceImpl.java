@@ -65,8 +65,13 @@ public class GoogleSttServiceImpl implements GoogleSttService {
         for (WordInfo wordInfo : alternative.getWordsList()) {
             int wordSpeakerTag = wordInfo.getSpeakerTag();
 
-            // 💡 1. 구글 모델 특유의 언더바(_) 및 이상한 공백 토큰 완벽 제거
-            String word = wordInfo.getWord().replaceAll("[_\\\\u2581]", "").trim();
+            // 기호 제거 (언더바, 유니코드, 깍두기 기호 ▁ 모두 직접 치환)
+            String word = wordInfo.getWord()
+                    .replace("_", "")
+                    .replace("\u2581", "")
+                    .replace("▁", "")
+                    .trim();
+
             if (word.isEmpty()) continue;
 
             long wordStartTime = wordInfo.getStartTime().getSeconds();
