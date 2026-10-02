@@ -1,7 +1,9 @@
 package com.callPing.callPing_API.dto.request.call;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+
 public record CallRecordUpdateRequestDTO(
-        String fileName,   // 파일명
-        String callerName, // 관계 (발신자 등)
-        String summary     // 요약
+        @JsonAlias({"fileName", "file_name"}) String fileName,
+        @JsonAlias({"callerName", "caller_name"}) String callerName,
+        String summary
 ) {}

@@ -20,7 +20,8 @@ public class GoogleSttServiceImpl implements GoogleSttService {
             // 1. STT 환경 설정
             SpeakerDiarizationConfig diarizationConfig = SpeakerDiarizationConfig.newBuilder()
                     .setEnableSpeakerDiarization(true)
-                    // 화자 수는 지정하지 않음
+                    .setMinSpeakerCount(2)
+                    .setMaxSpeakerCount(3)
                     .build();
 
             RecognitionConfig config = RecognitionConfig.newBuilder()
@@ -50,47 +51,59 @@ public class GoogleSttServiceImpl implements GoogleSttService {
     private List<CallTranscript> groupWordsIntoSentences(LongRunningRecognizeResponse response, CallRecord callRecord) {
         List<CallTranscript> transcripts = new ArrayList<>();
 
-        // 결과가 비어있으면 리턴
         if (response.getResultsList().isEmpty()) return transcripts;
 
+        // 구글 STT는 화자 분리 결과를 가장 마지막 Result에 몰아서 줌...
         SpeechRecognitionResult lastResult = response.getResults(response.getResultsCount() - 1);
         SpeechRecognitionAlternative alternative = lastResult.getAlternatives(0);
 
         StringBuilder currentSentence = new StringBuilder();
         int currentSpeakerTag = -1;
-        String startTime = "00:00"; // 첫 단어의 시작 시간
+        String startTime = "00:00";
+        long lastWordEndTime = 1;
 
         for (WordInfo wordInfo : alternative.getWordsList()) {
             int wordSpeakerTag = wordInfo.getSpeakerTag();
-            String word = wordInfo.getWord();
 
-            // 첫 단어 세팅
+            // 💡 1. 구글 모델 특유의 언더바(_) 및 이상한 공백 토큰 완벽 제거
+            String word = wordInfo.getWord().replaceAll("[_ ]", "").trim();
+            if (word.isEmpty()) continue;
+
+            long wordStartTime = wordInfo.getStartTime().getSeconds();
+
             if (currentSpeakerTag == -1) {
                 currentSpeakerTag = wordSpeakerTag;
-                startTime = formatTime(wordInfo.getStartTime().getSeconds());
+                startTime = formatTime(wordStartTime);
             }
 
-            // [문장을 끊는 조건]
+            // 2. 문장 끊는 조건 3개
             boolean isSpeakerChanged = (currentSpeakerTag != wordSpeakerTag);
+            boolean isLongPause = (lastWordEndTime > 0 && (wordStartTime - lastWordEndTime) >= 2); // 2초 이상 침묵
+            boolean isPunctuation = word.matches(".*[.?!]$");
 
-            if (isSpeakerChanged) {
-                transcripts.add(createTranscript(callRecord, currentSpeakerTag, startTime, currentSentence.toString()));
-                currentSentence.setLength(0);
+            // 화자가 바뀌었거나, 2초 이상 말이 없었을 때 강제 분리 ...
+            if (isSpeakerChanged || isLongPause) {
+                if (currentSentence.length() > 0) {
+                    transcripts.add(createTranscript(callRecord, currentSpeakerTag, startTime, currentSentence.toString().trim()));
+                    currentSentence.setLength(0);
+                }
                 currentSpeakerTag = wordSpeakerTag;
-                startTime = formatTime(wordInfo.getStartTime().getSeconds());
+                startTime = formatTime(wordStartTime);
             }
 
             currentSentence.append(word).append(" ");
+            lastWordEndTime = wordInfo.getEndTime().getSeconds();
 
             // 구두점으로 끝났다면 저장하고 초기화
-            if (word.matches(".*[.?!]$")) {
+            if (isPunctuation) {
                 transcripts.add(createTranscript(callRecord, currentSpeakerTag, startTime, currentSentence.toString().trim()));
                 currentSentence.setLength(0);
                 currentSpeakerTag = -1;
+                lastWordEndTime = 0;
             }
         }
 
-        // 마지막에 남은 텍스트가 있다면 저장
+        // 마지막 남은 텍스트 저장
         if (currentSentence.length() > 0) {
             transcripts.add(createTranscript(callRecord, currentSpeakerTag, startTime, currentSentence.toString().trim()));
         }
