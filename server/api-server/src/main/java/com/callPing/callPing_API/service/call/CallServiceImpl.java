@@ -245,6 +245,8 @@ public class CallServiceImpl implements CallService {
 
             String rawAiResponse = aiFeedbackService.getAiFeedback(activeTranscripts);
 
+            log.info("🚨 LoRA AI 실제 응답 원문: \n{}", rawAiResponse);
+
             // 파싱 및 저장
             parseAndSaveAiResponse(rawAiResponse, callRecord);
             log.info("2단계 LoRA AI 분석 완료 - recordId: {}", recordId);
@@ -260,15 +262,40 @@ public class CallServiceImpl implements CallService {
         try {
             JsonNode rootNode = objectMapper.readTree(rawAiResponse);
 
+            // 1. AI가 'llm_feedback' 껍데기를 누락하거나 이름을 바꿨을 경우를 대비한 다중 탐색
             JsonNode feedbackNode = rootNode.path("llm_feedback");
+            if (feedbackNode.isMissingNode()) feedbackNode = rootNode.path("llmFeedback"); // 카멜케이스 대비
+            if (feedbackNode.isMissingNode()) feedbackNode = rootNode; // 껍데기 없이 평면(Flat)으로 보냈을 경우 대비
+
+            // 2. 각 필드 데이터 추출 (스네이크 케이스, 카멜 케이스 모두 대비)
             String expression = feedbackNode.path("tone_analysis").asText("");
-            String feedback = feedbackNode.path("speech_feedback").asText("")
-                    + " / 개선점: " + feedbackNode.path("improvement_points").asText("");
-            String summary = rootNode.path("todo_summary").asText("요약 정보가 없습니다.");
+            if (expression.isBlank()) expression = feedbackNode.path("toneAnalysis").asText("");
+
+            String speechFeedback = feedbackNode.path("speech_feedback").asText("");
+            if (speechFeedback.isBlank()) speechFeedback = feedbackNode.path("speechFeedback").asText("");
+
+            String improvement = feedbackNode.path("improvement_points").asText("");
+            if (improvement.isBlank()) improvement = feedbackNode.path("improvementPoints").asText("");
+
+            // 3. 피드백 문자열 조합 (빈 껍데기 " / 개선점: " 방지)
+            String feedback = speechFeedback;
+            if (!improvement.isBlank()) {
+                feedback += (feedback.isBlank() ? "" : " / 개선점: ") + improvement;
+            }
+
+            // 값이 없을 때의 깔끔한 기본값
+            if (expression.isBlank()) expression = "표현 분석 결과가 없습니다.";
+            if (feedback.isBlank()) feedback = "피드백 내용이 없습니다.";
+
+            // 요약 추출
+            String summary = rootNode.path("todo_summary").asText("");
+            if (summary.isBlank()) summary = rootNode.path("todoSummary").asText("요약 정보가 없습니다.");
             String keywords = "미제공";
 
+            // DB 업데이트
             callRecord.updateAiAnalysis(expression, feedback, summary, keywords, "완료");
 
+            // 4. TODO 리스트 추출
             JsonNode todosNode = rootNode.path("todos");
             if (todosNode.isArray()) {
                 List<Todo> newTodos = new ArrayList<>();
@@ -276,7 +303,7 @@ public class CallServiceImpl implements CallService {
                     Todo todo = Todo.builder()
                             .userId(callRecord.getUserId())
                             .callRecord(callRecord)
-                            .taskType(todoItem.path("task_type").asText("MANUAL"))
+                            .taskType(todoItem.path("task_type").asText(todoItem.path("taskType").asText("MANUAL")))
                             .description(todoItem.path("description").asText("내용 없음"))
                             .priority(todoItem.path("priority").asText("MEDIUM"))
                             .status(todoItem.path("status").asText("PENDING"))
@@ -289,7 +316,7 @@ public class CallServiceImpl implements CallService {
 
         } catch (Exception e) {
             log.warn("AI 응답 JSON 파싱 실패. 일반 텍스트로 간주하여 저장합니다. 원문: {}", rawAiResponse);
-            callRecord.updateAiAnalysis("", rawAiResponse, "파싱 실패", "", "완료");
+            callRecord.updateAiAnalysis("파싱 실패", rawAiResponse, "파싱 실패", "", "완료");
         }
     }
 
