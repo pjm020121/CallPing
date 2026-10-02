@@ -166,8 +166,8 @@ public class CallServiceImpl implements CallService {
         CallTranscript transcript = callTranscriptRepository.findById(transcriptId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 문장을 찾을 수 없습니다."));
 
-        // 2. 엔티티 텍스트 수정 (TranscriptUpdateRequestDTO가 record 타입이면 request.text(), 일반 클래스면 request.getText() 사용)
-        transcript.updateText(request.text());
+        // 2. 엔티티 텍스트 수정
+        transcript.updateText(request.text(), request.speaker());
 
         // 3. 수정된 결과를 DTO로 조립하여 반환
         return new TranscriptSegmentDTO(
