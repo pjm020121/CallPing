@@ -1,6 +1,8 @@
 package com.callPing.callPing_API.controller.call;
 
+import com.callPing.callPing_API.dto.common.ApiResponse;
 import com.callPing.callPing_API.dto.request.call.CallRecordUpdateRequestDTO;
+import com.callPing.callPing_API.dto.request.call.TranscriptCreateRequestDTO;
 import com.callPing.callPing_API.dto.request.call.TranscriptUpdateRequestDTO;
 import com.callPing.callPing_API.dto.response.call.*;
 import com.callPing.callPing_API.dto.common.ApiCode;
@@ -143,4 +145,24 @@ public class CallController {
         callService.startAiAnalysisAsync(recordId); // 백그라운드 AI 분석 트리거
         return ResponseEntity.ok(java.util.Map.of("recordId", recordId, "status", "AI 분석중"));
     }
+
+    // 12. 말풍선 추가
+    @PostMapping("/{recordId}/transcripts")
+    public ResponseEntity<ApiResponse<TranscriptSegmentDTO>> addTranscript(
+            @PathVariable Long recordId,
+            @Valid @RequestBody TranscriptCreateRequestDTO request
+    ) {
+        TranscriptSegmentDTO addedSegment = callService.addTranscript(recordId, request);
+
+        // 💡 status(200)와 path 값을 추가하여 5개의 인자를 모두 채워줍니다.
+        return ResponseEntity.ok(ApiResponse.success(
+                200,
+                "CALL_TRANSCRIPT_ADDED",
+                "새로운 대화가 성공적으로 추가되었습니다.",
+                "/calls/" + recordId + "/transcripts",
+                addedSegment
+        ));
+    }
+
+
 }
