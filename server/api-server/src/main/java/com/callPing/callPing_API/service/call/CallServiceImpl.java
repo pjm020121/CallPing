@@ -352,6 +352,13 @@ public class CallServiceImpl implements CallService {
         CallRecord callRecord = callRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 녹음 기록을 찾을 수 없습니다."));
 
+        //  1. 자식 데이터(todos)를 먼저 삭제
+        // (TodoRepository에 void deleteByCallRecordId(Long callRecordId); 메서드가 있어야 함)
+        todoRepository.deleteAll(callRecord.getTodos());
+
+        // 💡 2. 그 다음 부모(callRecord)를 지운다.
+        callRecordRepository.delete(callRecord);
+
         callRecordRepository.delete(callRecord);
     }
 }

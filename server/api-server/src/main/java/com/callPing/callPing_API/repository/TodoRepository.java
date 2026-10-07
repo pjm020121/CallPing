@@ -10,4 +10,7 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
 
     // 2. 특정 통화 기록에서 파생된 TODO 목록
     List<Todo> findByCallRecordId(Long recordId);
+
+    // 3. 특정 통화 기록에서 파생된 TODO 식제
+    void deleteByCallRecordId(Long callRecordId);
 }
