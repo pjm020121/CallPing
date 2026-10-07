@@ -4,6 +4,7 @@ import com.callPing.callPing_API.domain.Todo;
 import com.callPing.callPing_API.domain.call.CallRecord;
 import com.callPing.callPing_API.domain.call.CallTranscript;
 import com.callPing.callPing_API.dto.request.call.CallRecordUpdateRequestDTO;
+import com.callPing.callPing_API.dto.request.call.TranscriptCreateRequestDTO;
 import com.callPing.callPing_API.dto.request.call.TranscriptUpdateRequestDTO;
 import com.callPing.callPing_API.dto.response.call.*;
 import com.callPing.callPing_API.repository.TodoRepository;
@@ -352,6 +353,45 @@ public class CallServiceImpl implements CallService {
         CallRecord callRecord = callRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 녹음 기록을 찾을 수 없습니다."));
 
+        //  1. 자식 데이터(todos)를 먼저 삭제
+        // (TodoRepository에 void deleteByCallRecordId(Long callRecordId); 메서드가 있어야 함)
+        todoRepository.deleteAll(callRecord.getTodos());
+
+        // 2. 그 다음 부모(callRecord)를 지운다.
         callRecordRepository.delete(callRecord);
+
+        callRecordRepository.delete(callRecord);
+    }
+
+    // =========================================================================
+    // 11. STT 문장(말풍선) 수동 추가
+    // =========================================================================
+    @Override
+    @Transactional
+    public TranscriptSegmentDTO addTranscript(Long recordId, TranscriptCreateRequestDTO request) {
+        // 1. 부모 통화 기록 찾기
+        CallRecord callRecord = callRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 녹음 기록을 찾을 수 없습니다."));
+
+        // 2. 새로운 대본(말풍선) 엔티티 생성
+        CallTranscript newTranscript = CallTranscript.builder()
+                .callRecord(callRecord)
+                .speaker(request.speaker())
+                .text(request.text())
+                .timestampOffset(request.timestampOffset() != null ? request.timestampOffset() : "00:00")
+                .isDeleted(false) // 기본값 명시
+                .build();
+
+        // 3. 부모 리스트에 추가하고 저장 (Cascade 설정으로 인해 save 됨)
+        callRecord.addTranscript(newTranscript);
+        callTranscriptRepository.save(newTranscript);
+
+        // 4. 생성된 결과를  DTO로 반환
+        return new TranscriptSegmentDTO(
+                newTranscript.getId(),
+                newTranscript.getSpeaker(),
+                newTranscript.getTimestampOffset(),
+                newTranscript.getText()
+        );
     }
 }

@@ -1,5 +1,6 @@
 package com.callPing.callPing_API.domain.call;
 
+import com.callPing.callPing_API.domain.Todo;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.OffsetDateTime;
@@ -38,6 +39,12 @@ public class CallRecord {
     @Builder.Default
     @OneToMany(mappedBy = "callRecord", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CallTranscript> transcripts = new ArrayList<>();
+
+    // 부모가 지워지면 자식(Todo)도 연쇄 삭제되도록 필드 선언
+    @Builder.Default
+    @OneToMany(mappedBy = "callRecord", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Todo> todos = new ArrayList<>();
+
     // 연관관계 편의 메서드 (문장을 리스트에 추가)
     public void addTranscript(CallTranscript transcript) {
         if (this.transcripts == null) {
@@ -80,4 +87,12 @@ public class CallRecord {
         if (callerName != null && !callerName.isBlank()) this.callerName = callerName;
         if (summary != null && !summary.isBlank()) this.summary = summary;
     }
+
+    // ==========================================
+    // 통화 기록과 관련된 Todo를 가져옴
+    // ==========================================
+    public List<Todo> getTodos() {
+        return this.todos;
+    }
+
 }
